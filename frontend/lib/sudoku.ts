@@ -84,7 +84,6 @@ export const generateSudoku = () => {
   const puzzle: Grid = solution.map(row => [...row]);
 
   // Dig holes (remove numbers) to create puzzle
-  // Let's remove around 40-45 numbers for an easy-medium puzzle
   let attempts = 45; 
   while (attempts > 0) {
     const row = Math.floor(Math.random() * 9);

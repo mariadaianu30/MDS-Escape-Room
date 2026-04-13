@@ -5,17 +5,30 @@ import { useRouter } from "next/navigation";
 import SudokuGrid from "@/components/SudokuGrid";
 import CombinationLock from "@/components/CombinationLock";
 import Timer from "@/components/Timer";
+import CollectibleItem from "@/components/CollectibleItem";
 import confetti from "canvas-confetti";
+import { useInventory } from "@/lib/InventoryContext";
 
 const GAME_DURATION = 30 * 60;
 
 export default function Level1() {
   const router = useRouter();
+  const { hasItem, items, equippedItem, setEquippedItem, removeItem } = useInventory();
+  const hasCompass = hasItem("brass_compass_lvl1");
+  const hasEraser = hasItem("chalk_eraser_lvl1");
   const [gameId, setGameId] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [extractedCode, setExtractedCode] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [showLevelComplete, setShowLevelComplete] = useState(false);
+  const [isBlackboardCleaned, setIsBlackboardCleaned] = useState(false);
+  const [isLockUnjammed, setIsLockUnjammed] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
+
+  const showNotification = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   // Game Over states
   const [isGameOver, setIsGameOver] = useState(false);
@@ -29,6 +42,19 @@ export default function Level1() {
       return;
     }
   }, [router]);
+
+  // Custom Mouse Cursor when Item Equipped!
+  useEffect(() => {
+    if (equippedItem) {
+      const item = items.find(i => i.id === equippedItem);
+      if (item && item.iconSrc) {
+        document.body.style.cursor = `url(${item.iconSrc}), auto`;
+      }
+    } else {
+      document.body.style.cursor = 'auto';
+    }
+    return () => { document.body.style.cursor = 'auto'; };
+  }, [equippedItem, items]);
 
   // Global Timer Loop
   useEffect(() => {
@@ -58,8 +84,37 @@ export default function Level1() {
     setTimeout(() => restartGame(), 4000);
   };
 
+  const handleBlackboardClick = () => {
+    if (isBlackboardCleaned) return;
+    if (equippedItem === "chalk_eraser_lvl1") {
+      setIsBlackboardCleaned(true);
+      showNotification("You wiped the blackboard clean.");
+      removeItem("chalk_eraser_lvl1");
+      setEquippedItem(null);
+    } else {
+      showNotification("The blackboard is covered in thick dust. You need to use something to wipe it clean.");
+    }
+  };
+
+  const handleLockClick = () => {
+    if (isLockUnjammed) return;
+    if (equippedItem === "brass_compass_lvl1") {
+      setIsLockUnjammed(true);
+      showNotification("You used the sturdy brass compass to force the rusted gears open!");
+      removeItem("brass_compass_lvl1");
+      setEquippedItem(null);
+    } else {
+      showNotification("The mechanism is jammed and rusted. You need a sturdy tool to force it open.");
+    }
+  };
+
   const handleSudokuSolved = (code: string) => {
-    setExtractedCode(code);
+    // Păstrăm numerele din colțurile pătratului central (ex: 9 elemente -> index 0, 2, 6, 8)
+    if (code.length === 9) {
+       setExtractedCode(code[0] + code[2] + code[6] + code[8]);
+    } else {
+       setExtractedCode(code);
+    }
   };
 
   const handleDoorUnlocked = () => {
@@ -130,7 +185,7 @@ export default function Level1() {
       <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-12 md:gap-24 overflow-hidden mt-6">
 
         {/* Central Desk Area - Sudoku */}
-        <div className="flex flex-col items-center justify-center w-full max-w-xl xl:max-w-2xl relative shrink-0">
+        <div className="flex flex-col items-center justify-center w-full max-w-xl xl:max-w-2xl relative shrink-0 translate-x-6 md:translate-x-12 xl:translate-x-20 z-20">
           <div className="relative p-6 md:p-10 w-full flex flex-col items-center justify-center rounded-2xl shadow-2xl"
             style={{
               backgroundImage: 'url(/images/desk.png)',
@@ -149,17 +204,43 @@ export default function Level1() {
           </div>
         </div>
 
+        {/* Floor-standing styled Blackboard with partial legs */}
+        <div 
+          onClick={handleBlackboardClick}
+          className="flex flex-col items-center justify-center w-full max-w-[180px] md:max-w-[240px] xl:max-w-[280px] relative shrink-0 z-10 my-8 md:my-0 cursor-pointer self-end mb-[-60px] md:mb-[-140px] xl:mb-[-200px]"
+        >
+           {/* Detailed Molded Frame and Slate */}
+           <div className="w-full relative z-10 shadow-[0_40px_60px_rgba(0,0,0,0.95)] rounded-sm border-[2px] border-[#0a0502] outline outline-2 outline-[#000]">
+              <div 
+                className="w-full aspect-[4/3] rounded-sm p-[12px] md:p-[16px] shadow-[inset_0_0_50px_rgba(0,0,0,1)] relative bg-[#1c1815] border-[3px] border-[#0a0806]"
+              >
+                 <div 
+                   className="w-full h-full bg-[#050505] relative overflow-hidden transition-all duration-1000 shadow-[inset_0_5px_40px_rgba(0,0,0,1)] border border-black/90 brightness-50 contrast-[0.80] sepia-[0.3] opacity-80"
+                   style={{
+                     backgroundImage: `url(${isBlackboardCleaned ? '/images/slate_clean.png' : '/images/slate_dirty.png'})`,
+                     backgroundSize: 'cover',
+                     backgroundPosition: 'center',
+                   }}
+                 ></div>
+                 
+                 {/* Subtle Bottom Ledge */}
+                 <div className="absolute bottom-[2px] left-[6px] right-[6px] h-2 bg-gradient-to-b from-[#3a2618] to-[#120a06] rounded-sm shadow-[0_5px_10px_rgba(0,0,0,0.8)] border-t border-[#4a3220] z-20 opacity-80 mt-1 pointer-events-none"></div>
+              </div>
+           </div>
+           
+           {/* Solid Wooden Legs Going Down */}
+           <div className="flex justify-between w-[85%] z-0 relative -translate-y-4 pointer-events-none">
+              <div className="w-[18px] h-[350px] bg-[#0a0806] border-x border-[#000] shadow-[inset_0_0_8px_black,5px_10px_15px_black]"></div>
+              <div className="w-[18px] h-[350px] bg-[#0a0806] border-x border-[#000] shadow-[inset_0_0_8px_black,5px_10px_15px_black]"></div>
+           </div>
+        </div>
+
         {/* Door and Lock Area - Side by Side */}
         <div className="flex flex-col items-center justify-center w-full max-w-sm xl:max-w-md h-full space-y-8 relative perspective-[1200px] shrink-0">
 
-          <div className={`mt-4 bg-black/80 border border-[#d4af37] p-4 text-center rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all duration-500 w-full mb-8 ${extractedCode ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 pointer-events-none translate-y-10 scale-95'}`}>
-            <p className="text-[#a89f91] font-cinzel text-sm uppercase tracking-widest mb-2">Extracted Code</p>
-            <p className="text-4xl text-[#d4af37] font-bold tracking-[0.2em]">{extractedCode || "XXXXXXXXX"}</p>
-          </div>
-
           <div
             className={`w-[280px] md:w-[380px] aspect-[2/3] rounded-t-full shadow-2xl relative flex items-center justify-center mt-auto
-              ${isUnlocked ? 'door-open-animation' : ''} transition-all duration-[3000ms]
+              ${isUnlocked ? 'animate-door-open pointer-events-none' : ''} transition-all duration-[3000ms] origin-left
             `}
             style={{
               backgroundImage: 'url(/images/door.png)',
@@ -174,10 +255,43 @@ export default function Level1() {
               <div className="absolute inset-0 bg-white shadow-[0_0_100px_white] -z-10 rounded-t-full animate-pulse blur-3xl"></div>
             )}
 
-            <div className={`transition-opacity duration-1000 ${isUnlocked ? 'opacity-0' : 'opacity-100'}`}>
-              <CombinationLock key={`lock-${gameId}`} onUnlock={handleDoorUnlocked} correctCode={extractedCode || "000000000"} />
+            <div className={`transition-opacity duration-1000 ${isUnlocked ? 'opacity-0' : 'opacity-100'} relative`}>
+               <div onClick={handleLockClick} className={`transition-all duration-700 ${!isLockUnjammed ? "opacity-60 blur-sm brightness-50 cursor-pointer" : ""}`}>
+                 <div className={!isLockUnjammed ? "pointer-events-none" : ""}>
+                    <CombinationLock key={`lock-${gameId}`} onUnlock={handleDoorUnlocked} correctCode={extractedCode || "0000"} />
+                 </div>
+               </div>
+               
+              
+              {/* Compass near the door lock */}
+              {/* Compass near the door lock */}
+              {!isLockUnjammed && (
+                <CollectibleItem 
+                  item={{
+                    id: "brass_compass_lvl1",
+                    name: "Brass Compass",
+                    description: "An old drafting compass. One of its needles is sharply bent.",
+                    iconSrc: "/images/brass_compass.png"
+                  }}
+                  className="absolute -bottom-[80px] -left-12"
+                />
+              )}
             </div>
           </div>
+          
+          {/* Eraser and Compass logically placed away from the puzzle targets */}
+          {/* Eraser and Compass logically placed away from the puzzle targets */}
+          {!isBlackboardCleaned && (
+            <CollectibleItem 
+               item={{
+                 id: "chalk_eraser_lvl1",
+                 name: "Chalk Eraser",
+                 description: "A vintage wooden chalk eraser.",
+                 iconSrc: "/images/chalk_eraser.png"
+               }}
+               className="fixed bottom-12 left-12 z-20 scale-75 opacity-60 hover:opacity-100 transition-all hover:drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]"
+            />
+          )}
         </div>
 
       </div>
@@ -217,6 +331,23 @@ export default function Level1() {
                 : "The mechanism has locked up due to too many errors. The puzzle resets..."}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Custom Notification Popup */}
+      {notification && (
+        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[80] bg-[#1a1208]/95 border border-[#d4af37] px-8 py-4 rounded shadow-[0_0_30px_rgba(212,175,55,0.4)] animate-in fade-in slide-in-from-bottom-5 duration-300 pointer-events-none">
+           <p className="text-[#e5d8b3] font-cinzel text-lg md:text-xl tracking-widest text-center">{notification}</p>
+        </div>
+      )}
+
+      {/* Equipped Item HUD Overlay */}
+      {equippedItem && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] bg-black/60 backdrop-blur border border-[#d4af37]/50 px-6 py-2 rounded-full shadow-[0_0_15px_black] animate-in slide-in-from-bottom-2 flex items-center gap-3">
+           <span className="text-[#a89f91] text-xs font-cinzel tracking-widest uppercase">Equipped:</span>
+           <span className="text-[#e5d8b3] text-sm font-bold font-cinzel uppercase">
+             {items.find(i => i.id === equippedItem)?.name}
+           </span>
         </div>
       )}
 

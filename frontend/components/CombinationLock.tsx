@@ -34,22 +34,22 @@ export default function CombinationLock({ onUnlock, correctCode }: CombinationLo
         <form onSubmit={handleSubmit} className="flex flex-col items-center w-full">
           <input
             type="text"
-            maxLength={9}
+            maxLength={4}
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="_________"
-            className={`bg-[#0a0705] border-2 ${error ? 'border-red-800' : success ? 'border-green-600' : 'border-[#3c2a1a]'} 
-              text-[#d4af37] text-center text-3xl md:text-5xl tracking-[0.3em] md:tracking-[0.5em] font-cormorant font-bold w-full p-4 rounded mb-6 focus:outline-none focus:border-[#d4af37] transition-colors`}
+            placeholder="____"
+            className={`bg-[#0a0705] border-2 ${error ? 'border-red-800' : success ? 'border-[#d4af37] text-white shadow-[0_0_40px_rgba(212,175,55,0.8)] glow-pulse' : 'border-[#3c2a1a]'} 
+              text-[#d4af37] text-center text-3xl md:text-5xl tracking-[0.3em] md:tracking-[0.5em] font-cormorant font-bold w-full p-4 rounded mb-6 focus:outline-none focus:border-[#d4af37] transition-all duration-700`}
           />
           
           <button 
             type="submit"
             disabled={success}
-            className={`font-cinzel py-3 px-8 text-xl font-bold rounded border-2 transition-all duration-300
-              ${success ? 'bg-green-900/50 border-green-700 text-green-300' : 'bg-[#3c2a1a] border-[#5c4026] text-[#e5d8b3] hover:bg-[#4a3420] hover:border-[#d4af37] hover:text-[#d4af37] shadow-[0_0_15px_rgba(0,0,0,0.5)] hover:shadow-[0_0_20px_rgba(212,175,55,0.3)]'}
+            className={`font-cinzel py-3 px-8 text-xl font-bold rounded border-2 transition-all duration-700
+              ${success ? 'bg-[#d4af37] border-white text-[#0a0705] shadow-[0_0_50px_rgba(212,175,55,1)] animate-pulse' : 'bg-[#3c2a1a] border-[#5c4026] text-[#e5d8b3] hover:bg-[#4a3420] hover:border-[#d4af37] hover:text-[#d4af37] shadow-[0_0_15px_rgba(0,0,0,0.5)] hover:shadow-[0_0_20px_rgba(212,175,55,0.3)]'}
             `}
           >
-            {success ? "UNLOCKED" : "TURN CYLINDERS"}
+            {success ? "MECHANISM UNLOCKED" : "TURN CYLINDERS"}
           </button>
 
           {error && (

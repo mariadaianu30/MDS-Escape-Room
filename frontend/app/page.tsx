@@ -213,7 +213,9 @@ export default function IntroHome() {
                            backgroundImage: 'url(/images/door.png)',
                            backgroundSize: 'cover',
                            backgroundPosition: 'center',
-                           border: isHoverMain ? '6px solid rgba(212,175,55,0.8)' : '4px solid rgba(0,0,0,0.9)'
+                           border: isHoverMain ? '6px solid rgba(212,175,55,0.8)' : '4px solid rgba(0,0,0,0.9)',
+                           transform: isCompleted ? 'perspective(1200px) rotateY(-35deg)' : 'perspective(1200px) rotateY(0deg)',
+                           transformOrigin: 'left'
                         }}
                      >
                         {/* Door Embedded ambient darkness */}
@@ -230,6 +232,7 @@ export default function IntroHome() {
                         `} />
 
                         {/* Locked/Unlocked States Marker */}
+                        {!isCompleted && (
                         <div className={`relative z-10 p-6 rounded-full border-2 shadow-[0_0_50px_black] bg-black/90 transition-colors duration-500
                            ${isUnlocked ? 'border-[#5c4026] group-hover:bg-[#2a1d0f]' : 'border-red-900'}
                         `}>
@@ -240,14 +243,13 @@ export default function IntroHome() {
                                     Complete the previous level to unlock
                                  </div>
                               </div>
-                           ) : isCompleted ? (
-                              <CheckCircle className="w-12 h-12 md:w-16 md:h-16 text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.8)]" strokeWidth={2} />
                            ) : (
                               <div className="text-4xl md:text-5xl font-cinzel text-[#e5d8b3] text-center w-12 h-12 md:w-16 md:h-16 font-bold flex items-center justify-center drop-shadow-[0_0_10px_white]">
                                  {level}
                               </div>
                            )}
                         </div>
+                        )}
                      </div>
 
                   </div>

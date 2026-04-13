@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Briefcase, X } from "lucide-react";
 
 export default function Inventory() {
-  const { items } = useInventory();
+  const { items, clearInventory, equippedItem, setEquippedItem } = useInventory();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
 
@@ -16,7 +16,7 @@ export default function Inventory() {
       {/* Inventory Toggle Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed top-6 right-6 lg:top-8 lg:right-12 p-3 bg-black/80 border-2 border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] transition-all rounded-lg shadow-[0_0_15px_black] z-40 flex items-center gap-2 group"
+        className="fixed top-24 right-4 lg:top-24 lg:right-6 p-3 bg-black/80 border-2 border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] transition-all rounded-lg shadow-[0_0_15px_black] z-[60] flex items-center gap-2 group"
       >
         <Briefcase size={24} className="group-hover:animate-pulse" />
         <span className="font-cinzel tracking-widest hidden md:inline">
@@ -86,9 +86,26 @@ export default function Inventory() {
                   <h3 className="font-cinzel text-3xl font-bold text-[#e5d8b3] mb-4">
                     {activeItem.name}
                   </h3>
-                  <p className="text-xl text-[#a89f91] leading-relaxed px-4 italic border-t border-b border-[#3c2a1a] py-6">
+                  <p className="text-xl text-[#a89f91] leading-relaxed px-4 italic border-t border-b border-[#3c2a1a] py-6 mb-6">
                     {activeItem.description}
                   </p>
+                  
+                  <button 
+                    onClick={() => {
+                        if (equippedItem === activeItem.id) {
+                            setEquippedItem(null);
+                        } else {
+                            setEquippedItem(activeItem.id);
+                        }
+                    }}
+                    className={`px-8 py-3 rounded-full font-cinzel font-bold tracking-widest transition-all ${
+                        equippedItem === activeItem.id 
+                        ? 'bg-[#d4af37] text-black shadow-[0_0_20px_rgba(212,175,55,0.6)]' 
+                        : 'bg-transparent border-2 border-[#5c4026] text-[#c7baaa] hover:border-[#d4af37] hover:text-[#d4af37]'
+                    }`}
+                  >
+                    {equippedItem === activeItem.id ? 'UNEQUIP' : 'EQUIP ITEM'}
+                  </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center text-center text-[#5c4026] opacity-70">
@@ -98,6 +115,12 @@ export default function Inventory() {
               )}
             </div>
 
+            <button 
+                onClick={() => { clearInventory(); setIsOpen(false); }}
+                className="absolute bottom-4 right-4 text-xs text-red-900 hover:text-red-600 uppercase tracking-widest font-cinzel opacity-40 hover:opacity-100"
+            >
+                [Debug: Clear Storage]
+            </button>
           </div>
         </div>
       )}

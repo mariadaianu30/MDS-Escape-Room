@@ -16,6 +16,15 @@ const config: Config = {
       fontFamily: {
         cinzel: ['Cinzel', 'serif'],
         cormorant: ['Cormorant Garamond', 'serif'],
+      },
+      keyframes: {
+        'door-open': {
+          '0%': { transform: 'perspective(1200px) rotateY(0deg)', transformOrigin: 'left' },
+          '100%': { transform: 'perspective(1200px) rotateY(-105deg)', transformOrigin: 'left', opacity: '0' },
+        }
+      },
+      animation: {
+        'door-open': 'door-open 3s cubic-bezier(0.4, 0, 0.2, 1) forwards',
       }
     },
   },

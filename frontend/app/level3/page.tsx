@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
-import AIChat from "@/components/AIChat";
 
 export default function Level3() {
   const router = useRouter();
@@ -88,8 +87,8 @@ export default function Level3() {
          </div>
       )}
 
-      {/* AI Integration */}
-      <AIChat puzzleId="astronomer_telescope" gameProgress={constellationSolved ? "Telescope aligned" : "Searching for lenses"} />
+      {/* AI Integration va veni aici mai târziu */}
+
 
     </main>
   );
