@@ -2,14 +2,19 @@
 
 import { useInventory } from "@/lib/InventoryContext";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Briefcase, X } from "lucide-react";
 
 export default function Inventory() {
   const { items, clearInventory, equippedItem, setEquippedItem } = useInventory();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
+  const pathname = usePathname();
 
   const activeItem = items.find((i) => i.id === selectedItem);
+
+  // Hide inventory button on the home/corridor page
+  if (pathname === '/') return null;
 
   return (
     <>

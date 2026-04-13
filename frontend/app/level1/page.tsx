@@ -175,9 +175,16 @@ export default function Level1() {
       />
 
       {/* Title */}
-      <h1 className="font-cinzel text-3xl md:text-5xl text-[#d4af37] text-center w-full relative z-20 mt-6 mb-2 drop-shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-        Level 1 — The Mathematical Library
-      </h1>
+      <div className="relative z-20 mt-5 mb-2 flex flex-col items-center w-full">
+        <div className="flex items-center gap-3 mb-1 opacity-40">
+          <div className="h-px w-12 md:w-24 bg-gradient-to-r from-transparent to-[#d4af37]" />
+          <span className="font-cinzel text-[9px] tracking-[0.5em] text-[#d4af37] uppercase">Chamber I</span>
+          <div className="h-px w-12 md:w-24 bg-gradient-to-l from-transparent to-[#d4af37]" />
+        </div>
+        <h1 className="font-cinzel text-3xl md:text-5xl text-[#d4af37] text-center drop-shadow-[0_0_15px_rgba(212,175,55,0.4)] tracking-widest">
+          The Mathematical Library
+        </h1>
+      </div>
 
       {/* Timer */}
       {!showLevelComplete && !isGameOver && <Timer key={`timer-${gameId}`} timeLeft={timeLeft} />}
@@ -273,7 +280,7 @@ export default function Level1() {
                     description: "An old drafting compass. One of its needles is sharply bent.",
                     iconSrc: "/images/brass_compass.png"
                   }}
-                  className="absolute -bottom-[80px] -left-12"
+                  className="absolute -bottom-[80px] -left-12 opacity-30 hover:opacity-90 transition-opacity"
                 />
               )}
             </div>
@@ -289,7 +296,7 @@ export default function Level1() {
                  description: "A vintage wooden chalk eraser.",
                  iconSrc: "/images/chalk_eraser.png"
                }}
-               className="fixed bottom-12 left-12 z-20 scale-75 opacity-60 hover:opacity-100 transition-all hover:drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]"
+               className="fixed bottom-12 left-12 z-20 scale-75 opacity-30 hover:opacity-90 transition-all"
             />
           )}
         </div>

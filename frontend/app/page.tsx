@@ -2,7 +2,22 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, CheckCircle, Volume2, VolumeX, BookOpen } from "lucide-react";
+import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight } from "lucide-react";
+import "./particles.css";
+
+// Floating dust motes — purely decorative
+const DustMote = ({ style }: { style: React.CSSProperties }) => (
+  <div className="mote" style={style} />
+);
+
+const MOTES = Array.from({ length: 28 }, (_, i) => ({
+  left: `${(i * 37 + 11) % 100}%`,
+  top: `${(i * 53 + 7) % 100}%`,
+  width: `${(i % 3) + 1}px`,
+  height: `${(i % 3) + 1}px`,
+  "--duration": `${12 + (i % 10)}s`,
+  animationDelay: `${(i * 0.7) % 10}s`,
+} as React.CSSProperties));
 
 const LABELS = [
   "The Mathematical Library", 
@@ -17,6 +32,7 @@ export default function IntroHome() {
   const [completedLevel, setCompletedLevel] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [isExploring, setIsExploring] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(true);
@@ -128,13 +144,91 @@ export default function IntroHome() {
   return (
     <main 
       onClick={handleGlobalInteraction}
-      className={`min-h-screen relative bg-black font-cormorant flex flex-col items-center select-none text-[#e5d8b3] transition-opacity duration-1000 ${isZooming ? "pointer-events-none overflow-hidden" : ""}`}
+      className={`min-h-screen relative bg-black font-cormorant flex flex-col items-center select-none text-[#e5d8b3] transition-opacity duration-1000 overflow-hidden ${isZooming ? "pointer-events-none" : ""}`}
     >
-      {/* 1. Global Stylized Background FIXED to viewport! */}
+
+      {/* ========== HERO LANDING SCREEN ========== */}
+      {!isExploring && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden">
+          {/* Background with Ken Burns zoom */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center ken-burns brightness-[0.6] scale-105"
+            style={{ backgroundImage: 'url(/images/landing_bg.png)' }}
+          />
+          {/* Dark vignette — top & bottom */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black" />
+          {/* Golden side glows */}
+          <div className="absolute left-0 inset-y-0 w-[30vw] bg-gradient-to-r from-black/60 to-transparent pointer-events-none" />
+          <div className="absolute right-0 inset-y-0 w-[30vw] bg-gradient-to-l from-black/60 to-transparent pointer-events-none" />
+          {/* Warm amber accent glow from bottom */}
+          <div className="absolute bottom-0 inset-x-0 h-[40vh] bg-gradient-to-t from-[#8b5e1a]/20 to-transparent pointer-events-none" />
+
+          {/* Floating dust motes */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            {MOTES.map((s, i) => <DustMote key={i} style={s} />)}
+          </div>
+
+          {/* Central content */}
+          <div className="relative z-10 flex flex-col items-center text-center px-6">
+            {/* Decorative top line */}
+            <div className="flex items-center gap-4 mb-6 opacity-60">
+              <div className="h-px w-16 md:w-32 bg-gradient-to-r from-transparent to-[#d4af37]" />
+              <span className="font-cinzel text-[#d4af37] text-[10px] md:text-xs tracking-[0.6em] uppercase">Est. Veritas</span>
+              <div className="h-px w-16 md:w-32 bg-gradient-to-l from-transparent to-[#d4af37]" />
+            </div>
+
+            <p className="font-cinzel text-[#d4af37] text-base md:text-xl tracking-[0.5em] mb-5 opacity-80 uppercase animate-pulse">
+              Seek The Hidden Truth
+            </p>
+
+            <h1 className="font-cinzel text-6xl md:text-[9rem] text-[#e5d8b3] cinematic-title drop-shadow-[0_0_60px_rgba(0,0,0,1)] uppercase font-bold tracking-tighter leading-none mb-3">
+              Escape
+            </h1>
+            <h1 className="font-cinzel text-6xl md:text-[9rem] text-[#d4af37] cinematic-title drop-shadow-[0_0_40px_rgba(212,175,55,0.6)] uppercase font-bold tracking-tighter leading-none mb-10">
+              Room
+            </h1>
+
+            {/* Decorative middle line */}
+            <div className="flex items-center gap-3 mb-10 opacity-50">
+              <div className="h-px w-10 md:w-20 bg-[#d4af37]" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />
+              <div className="h-px w-10 md:w-20 bg-[#d4af37]" />
+            </div>
+            
+            <button 
+              onClick={() => setIsExploring(true)}
+              className="group relative px-16 py-6 overflow-hidden rounded-full border-2 border-[#d4af37]/50 bg-black/50 backdrop-blur-xl transition-all duration-500 hover:border-[#d4af37] hover:shadow-[0_0_60px_rgba(212,175,55,0.4),0_0_120px_rgba(212,175,55,0.1)] active:scale-95"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-[#d4af37]/0 via-[#d4af37]/15 to-[#d4af37]/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+              <div className="relative flex items-center gap-5 text-xl md:text-2xl font-cinzel tracking-[0.3em] text-[#d4af37] group-hover:text-white transition-colors duration-300 uppercase">
+                Enter The Gates
+                <ChevronRight size={26} className="group-hover:translate-x-2 transition-transform duration-300" />
+              </div>
+            </button>
+          </div>
+
+          {/* Bottom toolbar */}
+          <div className="absolute bottom-10 inset-x-0 flex justify-center gap-12 items-center z-10">
+            <div className="h-px w-12 bg-[#5c4026]/60" />
+            <button 
+              onClick={() => setShowRules(true)} 
+              className="text-[#8c7a6b] hover:text-[#d4af37] font-cinzel tracking-[0.3em] text-[10px] border-b border-transparent hover:border-[#d4af37] transition-all pb-0.5 uppercase"
+            >Guidelines</button>
+            <div className="w-px h-4 bg-[#5c4026]/60" />
+            <button onClick={toggleMusic} className="text-[#8c7a6b] hover:text-[#d4af37] transition-all">
+              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} className="animate-pulse" />}
+            </button>
+            <div className="h-px w-12 bg-[#5c4026]/60" />
+          </div>
+        </div>
+      )}
+      {/* 1. Global Stylized Background FIXED to viewport — with blur layer */}
       <div 
         className="fixed inset-0 z-0 bg-cover bg-center brightness-[0.7] sepia-[0.2]"
         style={{ backgroundImage: 'url(/images/corridor.png)' }}
       />
+      {/* Blur overlay on corridor background */}
+      <div className="fixed inset-0 z-[1] backdrop-blur-[3px] bg-black/10 pointer-events-none" />
       
       {/* Dynamic Floor Fog Simulation FIXED to viewport bottom */}
       <div className="fixed bottom-0 left-0 right-0 h-[30vh] z-10 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none mix-blend-multiply" />
@@ -143,28 +237,31 @@ export default function IntroHome() {
       <div className={`relative w-full z-20 flex-col items-center transition-transform duration-1000 ${isZooming ? 'corridor-zoom' : ''}`}>
          
          {/* Top Header UI */}
-         <div className={`w-full flex justify-between items-start pt-8 px-6 md:px-12 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
+         <div className={`w-full flex justify-between items-start pt-14 px-6 md:px-12 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
             <button 
                onClick={() => setShowRules(true)}
-               className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/60 p-3 md:p-4 uppercase tracking-widest text-xs md:text-sm font-cinzel border-2 border-[#5c4026] rounded hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.6)] backdrop-blur-md"
+               className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
             >
-               <BookOpen size={20} />
+               <BookOpen size={16} />
                <span className="hidden md:inline">How to Play</span>
             </button>
 
-            <h1 className="font-cinzel text-5xl md:text-8xl text-[#d4af37] drop-shadow-[0_0_50px_rgba(212,175,55,0.9)] tracking-[0.1em] text-center font-bold">
-               Escape Room
-            </h1>
+            <div className="flex flex-col items-center gap-1">
+               <span className="font-cinzel text-[10px] tracking-[0.5em] text-[#8c7a6b] uppercase opacity-60">The Ancient Halls</span>
+               <h1 className="font-cinzel text-4xl md:text-7xl text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.7)] tracking-[0.1em] text-center font-bold cinematic-title">
+                  Escape Room
+               </h1>
+            </div>
 
             <button 
                onClick={toggleMusic}
-               className={`p-4 md:p-5 rounded-full border-2 transition-all backdrop-blur-xl flex items-center justify-center
+               className={`p-3 md:p-4 rounded-full border transition-all backdrop-blur-xl flex items-center justify-center
                ${!hasInteracted || isMuted 
-                  ? 'bg-black/90 border-[#5c4026] text-[#8c7a6b] hover:text-[#d4af37]' 
-                  : 'bg-black/70 border-[#d4af37] text-[#d4af37] shadow-[0_0_30px_rgba(212,175,55,0.5)]'}
+                  ? 'bg-black/80 border-[#5c4026]/60 text-[#8c7a6b] hover:text-[#d4af37] hover:border-[#d4af37]' 
+                  : 'bg-black/60 border-[#d4af37] text-[#d4af37] shadow-[0_0_20px_rgba(212,175,55,0.4)]'}
                `}
             >
-               {isMuted ? <VolumeX size={26} /> : <Volume2 size={26} className="animate-pulse" />}
+               {isMuted ? <VolumeX size={22} /> : <Volume2 size={22} className="animate-pulse" />}
             </button>
          </div>
 
@@ -186,20 +283,18 @@ export default function IntroHome() {
                     `}
                   >
                      
-                     {/* Immersive Torch Light Aura flanking the door */}
-                     <div className="absolute -left-16 md:-left-32 top-1/2 w-48 h-48 md:w-64 md:h-64 bg-[radial-gradient(circle_at_center,rgba(255,140,0,0.4)_0%,transparent_70%)] rounded-full anim-flicker pointer-events-none mix-blend-screen" />
-                     <div className="absolute -right-16 md:-right-32 top-1/2 w-48 h-48 md:w-64 md:h-64 bg-[radial-gradient(circle_at_center,rgba(255,140,0,0.4)_0%,transparent_70%)] rounded-full anim-flicker pointer-events-none mix-blend-screen" />
-                     
-                     {/* Wall Torch visual core endpoints */}
-                     <div className="absolute -left-12 md:-left-20 top-1/2 w-4 h-[10px] bg-yellow-200 rounded-full shadow-[0_0_20px_rgba(255,140,0,1)] anim-torch pointer-events-none" />
-                     <div className="absolute -right-12 md:-right-20 top-1/2 w-4 h-[10px] bg-yellow-200 rounded-full shadow-[0_0_20px_rgba(255,140,0,1)] anim-torch pointer-events-none" />
 
-                     {/* Floating Label */}
-                     <span className={`font-cinzel text-2xl md:text-4xl font-bold tracking-widest drop-shadow-[0_0_20px_black] mb-6 md:mb-10 text-center bg-black/80 px-8 py-4 rounded-xl border opacity-100 transition-all duration-[400ms]
-                        ${isHoverMain ? 'text-[#e5d8b3] border-[#d4af37] shadow-[0_0_40px_rgba(212,175,55,0.7)]' : 'text-[#8c7a6b] border-[#5c4026]'}
-                     `}>
-                        {LABELS[level - 1]}
-                     </span>
+                     {/* Room label — refined */}
+                     <div className="flex flex-col items-center mb-6 md:mb-10 text-center">
+                        <span className={`font-cinzel text-[10px] tracking-[0.5em] uppercase mb-2 transition-colors duration-300
+                           ${isUnlocked ? 'text-[#d4af37]/60' : 'text-[#5c4026]/40'}
+                        `}>Chamber {level}</span>
+                        <span className={`font-cinzel text-2xl md:text-4xl font-bold tracking-widest drop-shadow-[0_0_20px_black] text-center bg-black/70 px-8 py-4 rounded-xl border backdrop-blur-md transition-all duration-[400ms]
+                           ${isHoverMain ? 'text-[#e5d8b3] border-[#d4af37]/70 shadow-[0_0_40px_rgba(212,175,55,0.5)]' : isUnlocked ? 'text-[#c7baaa] border-[#5c4026]/50' : 'text-[#5c4026]/50 border-[#5c4026]/20'}
+                        `}>
+                           {LABELS[level - 1]}
+                        </span>
+                     </div>
                      
                      {/* The Physical Stylized RPG Door Element */}
                      <div 

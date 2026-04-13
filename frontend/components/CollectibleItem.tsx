@@ -37,11 +37,8 @@ export default function CollectibleItem({ item, className = "" }: CollectibleIte
       `}
       title={item.name}
     >
-      {/* Visual Glint / Sparkle effect on hover or idle */}
-      <div className="absolute -inset-2 bg-yellow-500/0 group-hover:bg-yellow-500/20 rounded-full blur-md transition-colors duration-300"></div>
-      
-      {/* The actual item icon or emoji */}
-      <div className="relative z-10 flex items-center justify-center text-4xl sm:text-5xl drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] filter transition-all group-hover:brightness-125">
+      {/* Glow follows the PNG shape via filter drop-shadow, no square background */}
+      <div className="relative z-10 flex items-center justify-center text-4xl sm:text-5xl transition-all group-hover:brightness-125">
         {item.iconSrc ? (
           <img src={item.iconSrc} alt={item.name} className="w-12 h-12 object-contain" />
         ) : (
