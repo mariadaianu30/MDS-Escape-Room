@@ -421,40 +421,39 @@ export default function Level3() {
       <TwinklingStars />
       <ShootingComet />
 
-      {/* Title */}
-      <div className="relative z-20 mt-5 mb-1 flex flex-col items-center w-full">
+      {/* Title — moved slightly lower to clear inventory overlap */}
+      <div className="relative z-20 mt-3 mb-1 flex flex-col items-center w-full">
         <div className="flex items-center gap-3 mb-1 opacity-40">
-          <div className="h-px w-12 md:w-24 bg-gradient-to-r from-transparent to-[#6b9fd4]" />
+          <div className="h-px w-12 bg-gradient-to-r from-transparent to-[#6b9fd4]" />
           <span className="font-cinzel text-[9px] tracking-[0.5em] text-[#6b9fd4] uppercase">Chamber III</span>
-          <div className="h-px w-12 md:w-24 bg-gradient-to-l from-transparent to-[#6b9fd4]" />
+          <div className="h-px w-12 bg-gradient-to-l from-transparent to-[#6b9fd4]" />
         </div>
-        <h1 className="font-cinzel text-3xl md:text-5xl text-[#b8d4f0] text-center drop-shadow-[0_0_20px_rgba(107,159,212,0.5)] tracking-widest">
+        <h1 className="font-cinzel text-xl md:text-3xl text-[#b8d4f0] text-center drop-shadow-[0_0_15px_rgba(107,159,212,0.4)] tracking-[0.2em] leading-normal">
           The Astronomer's Tower
         </h1>
       </div>
 
       {!showLevelComplete && !isGameOver && <Timer key={`timer-${gameId}`} timeLeft={timeLeft} />}
 
-      {/* ─── Game Layout ─── */}
-      <div className="relative z-10 w-full flex flex-col lg:flex-row items-start justify-center gap-6 px-4 md:px-10 mt-4 pb-4">
+      {/* ─── Game Layout — shifted down slightly ─── */}
+      <div className="relative z-10 w-full flex flex-col lg:flex-row items-start justify-center gap-4 px-4 md:px-10 mt-4 pb-4">
 
-        {/* LEFT PANEL: Story, Clue, Telescope */}
-        <div className="flex flex-col gap-4 w-full lg:max-w-xs shrink-0">
+        {/* LEFT PANEL: Story, Clue, Telescope — spaced out to fill height */}
+        <div className="flex flex-col gap-3 w-full lg:max-w-md shrink-0">
 
           {/* Story / Lore */}
-          <div className="bg-black/50 backdrop-blur-sm border border-[#1e3550] rounded-xl p-5">
-            <h2 className="font-cinzel text-[#6b9fd4] text-sm tracking-[0.3em] uppercase mb-3">The Archivist's Note</h2>
-            <p className="text-[#8aa1b8] text-base leading-relaxed italic">
+          <div className="bg-black/50 backdrop-blur-sm border border-[#1e3550] rounded-xl p-4 md:p-5 shadow-[inset_0_0_20px_rgba(30,53,80,0.2)]">
+            <h2 className="font-cinzel text-[#6b9fd4] text-[11px] tracking-[0.4em] uppercase mb-2">The Archivist's Note</h2>
+            <p className="text-[#8aa1b8] text-sm md:text-lg leading-relaxed italic">
               "The passage opens only when the Ancients' lost constellation is traced in full upon the celestial sphere.
-              Three patterns are etched on the dome — but only one unlocks the seal.
-              Study the <span className="text-[#d4af37] not-italic font-bold">clue on the scroll</span>, then insert the lens and align the correct stars."
+              Study the <span className="text-[#d4af37] not-italic font-bold">clue on the scroll</span>, then insert the lens."
             </p>
           </div>
 
           {/* Clue scroll */}
-          <div className="bg-[#0a0e1a]/70 border border-[#d4af37]/30 rounded-xl p-5">
-            <h2 className="font-cinzel text-[#d4af37] text-sm tracking-[0.3em] uppercase mb-3">Ancient Scroll</h2>
-            <p className="text-[#e5d8b3] text-lg italic leading-relaxed">
+          <div className="bg-[#0a0e1a]/70 border border-[#d4af37]/30 rounded-xl p-5 md:p-6 shadow-[0_0_30px_rgba(212,175,55,0.08)] bg-[url('https://www.transparenttextures.com/patterns/parchment.png')]">
+            <h2 className="font-cinzel text-[#d4af37] text-[11px] tracking-[0.4em] uppercase mb-2">Ancient Scroll</h2>
+            <p className="text-lg md:text-2xl text-[#e5d8b3] italic leading-tight font-medium">
               "{CORRECT_CONSTELLATION.clue}"
             </p>
           </div>
@@ -462,46 +461,45 @@ export default function Level3() {
           {/* Telescope */}
           <div
             onClick={handleTelescopeClick}
-            className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all duration-500
+            className={`flex items-center gap-5 p-4 md:p-5 rounded-xl border-2 cursor-pointer transition-all duration-500
               ${lensInserted
-                ? "border-[#6b9fd4] bg-[#091628]/80 shadow-[0_0_30px_rgba(107,159,212,0.3)]"
-                : "border-[#1e3550]/60 bg-black/40 hover:border-[#2b5070] hover:shadow-[0_0_15px_rgba(43,80,112,0.3)]"}
+                ? "border-[#6b9fd4] bg-[#091628]/80 shadow-[0_0_25px_rgba(107,159,212,0.3)]"
+                : "border-[#1e3550]/60 bg-black/40 hover:border-[#2b5070]"}
               backdrop-blur-sm
             `}
           >
             <img
               src="/images/telescope.png"
               alt="Telescope"
-              className={`w-20 h-20 object-contain drop-shadow-[0_0_10px_rgba(0,0,0,0.8)] transition-all duration-500
-                ${lensInserted ? "drop-shadow-[0_0_20px_rgba(107,159,212,0.6)] brightness-110" : "brightness-75"}
+              className={`w-14 h-14 object-contain drop-shadow-[0_0_15px_rgba(0,0,0,0.8)] transition-all duration-500
+                ${lensInserted ? "brightness-125 scale-110" : "brightness-75 opacity-50"}
               `}
             />
             <div>
-              <p className="font-cinzel text-[#b8d4f0] text-base tracking-wider">Great Telescope</p>
+              <p className="font-cinzel text-[#b8d4f0] text-base md:text-lg tracking-[0.1em] uppercase">Great Telescope</p>
               {!lensInserted
-                ? <p className="text-xs text-red-400/70 mt-1 font-cinzel">⚠ Lens missing — search the room</p>
-                : <p className="text-xs text-[#6b9fd4] mt-1 font-cinzel">✦ Lens installed — chart the stars</p>
+                ? <p className="text-xs text-red-400 mt-1 font-cinzel">⚠ Lens missing</p>
+                : <p className="text-xs text-[#6b9fd4] mt-1 font-cinzel tracking-widest">✦ Lens installed</p>
               }
             </div>
           </div>
 
           {/* Instructions */}
           {lensInserted && (
-            <div className="bg-black/40 border border-[#1e3550]/50 rounded-xl p-4 animate-in fade-in duration-500">
-              <h2 className="font-cinzel text-[#6b9fd4] text-xs tracking-[0.3em] uppercase mb-2">How to Play</h2>
-              <ul className="text-[#8aa1b8] text-sm space-y-1 list-none">
-                <li>◈ Select a constellation from the 3 panels</li>
-                <li>◈ Click two stars to draw a line between them</li>
-                <li>◈ Complete the correct constellation pattern</li>
-                <li>◈ Wrong pattern = it resets. 3 wrong lines = full reset</li>
+            <div className="bg-black/40 border border-[#1e3550]/50 rounded-xl p-4 md:p-5 animate-in fade-in duration-500">
+              <h2 className="font-cinzel text-[#6b9fd4] text-[11px] tracking-[0.4em] uppercase mb-2">How to Play</h2>
+              <ul className="text-[#8aa1b8] text-sm md:text-base space-y-1 list-none">
+                <li>◈ Select constellation charts below</li>
+                <li>◈ Connect stars with your cursor</li>
+                <li>◈ Complete the pattern to unlock</li>
               </ul>
             </div>
           )}
         </div>
 
-        {/* Constellation grid — pushed lower, full width */}
+        {/* Constellation grid — adjusted lower, full width */}
         <div className={`flex-1 transition-all duration-700 ${!lensInserted ? "invisible pointer-events-none" : "opacity-100"}`}>
-          <div className="flex items-center justify-between mb-4 mt-8">
+          <div className="flex items-center justify-between mb-4 mt-24 md:mt-28">
             <p className="font-cinzel text-[#6b9fd4]/50 text-xs tracking-[0.4em] uppercase">
               {lensInserted ? "◈ Select a constellation to trace ◈" : ""}
             </p>

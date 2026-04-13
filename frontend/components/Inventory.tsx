@@ -21,7 +21,7 @@ export default function Inventory() {
       {/* Inventory Toggle Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed top-24 right-4 lg:top-24 lg:right-6 p-3 bg-black/80 border-2 border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] transition-all rounded-lg shadow-[0_0_15px_black] z-[60] flex items-center gap-2 group"
+        className="fixed top-28 right-4 lg:top-28 lg:right-6 p-3 bg-black/80 border-2 border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] transition-all rounded-lg shadow-[0_0_15px_black] z-[60] flex items-center gap-2 group"
       >
         <Briefcase size={24} className="group-hover:animate-pulse" />
         <span className="font-cinzel tracking-widest hidden md:inline">
