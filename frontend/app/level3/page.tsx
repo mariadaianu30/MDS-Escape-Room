@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
 import CollectibleItem from "@/components/CollectibleItem";
@@ -8,6 +8,111 @@ import Timer from "@/components/Timer";
 import confetti from "canvas-confetti";
 
 const GAME_DURATION = 30 * 60;
+
+// ─── Twinkling background stars ──────────────────────────────────────────────
+const STAR_COUNT = 80;
+const BG_STARS = Array.from({ length: STAR_COUNT }, (_, i) => ({
+  x: Math.abs(Math.sin(i * 7.3 + 1) * 100),
+  y: Math.abs(Math.sin(i * 3.7 + 2) * 100),
+  size: (Math.abs(Math.sin(i * 11.1)) * 2.5) + 0.5,
+  delay: (Math.abs(Math.sin(i * 5.9)) * 5).toFixed(1),
+  duration: ((Math.abs(Math.sin(i * 2.3)) * 3) + 2).toFixed(1),
+}));
+
+function TwinklingStars() {
+  return (
+    <div className="fixed inset-0 z-[2] pointer-events-none overflow-hidden">
+      {BG_STARS.map((star, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full bg-white"
+          style={{
+            left: `${star.x}%`,
+            top: `${star.y}%`,
+            width: `${star.size}px`,
+            height: `${star.size}px`,
+            opacity: 0,
+            animation: `twinkle ${star.duration}s ${star.delay}s ease-in-out infinite alternate`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes twinkle {
+          0% { opacity: 0.05; transform: scale(1); }
+          100% { opacity: 0.9; transform: scale(1.4); }
+        }
+        @keyframes comet {
+          0% { transform: translateX(-5vw) translateY(-5vh) rotate(-35deg); opacity: 0; }
+          10% { opacity: 0.6; }
+          40% { opacity: 0.4; }
+          70% { opacity: 0.2; }
+          100% { transform: translateX(120vw) translateY(80vh) rotate(-35deg); opacity: 0; }
+        }
+        @keyframes nebula-pulse {
+          0%, 100% { opacity: 0.08; transform: scale(1); }
+          50% { opacity: 0.18; transform: scale(1.05); }
+        }
+        @keyframes constellation-glow {
+          0% { filter: drop-shadow(0 0 2px #d4af37); }
+          50% { filter: drop-shadow(0 0 25px #d4af37) drop-shadow(0 0 50px #fff8dc); }
+          100% { filter: drop-shadow(0 0 2px #d4af37); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function ShootingComet() {
+  const [comets, setComets] = useState<{id:number, x:number, y:number, scale:number}[]>([]);
+  const nextId = useRef(0);
+
+  useEffect(() => {
+    const fire = () => {
+      const id = nextId.current++;
+      const scale = 0.5 + Math.random() * 0.7;
+      setComets(prev => [...prev, { id, x: 2 + Math.random() * 40, y: 2 + Math.random() * 30, scale }]);
+      // Sync timeout with the 12s animation duration
+      setTimeout(() => setComets(prev => prev.filter(c => c.id !== id)), 12000);
+    };
+    fire();
+    const interval = setInterval(fire, 10000 + Math.random() * 8000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <>
+      {comets.map(comet => (
+        <div key={comet.id}
+          className="fixed z-[5] pointer-events-none"
+          style={{
+            left: `${comet.x}%`,
+            top: `${comet.y}%`,
+            animation: 'comet 12s cubic-bezier(0.1, 0.2, 0.7, 1.0) forwards',
+            transform: `scale(${comet.scale})`,
+          }}
+        >
+          {/* Comet tail — three gradient layers, very subtle and fading */}
+          <div className="relative flex items-center">
+            {/* Outer diffuse trail */}
+            <div className="absolute right-full top-1/2 -translate-y-1/2 h-[1.5px] w-32 rounded-full"
+              style={{ background: 'linear-gradient(to left, rgba(180,220,255,0.15), rgba(107,159,212,0.03), transparent)' }} />
+            {/* Mid trail */}
+            <div className="absolute right-full top-1/2 -translate-y-1/2 h-[1px] w-20 rounded-full"
+              style={{ background: 'linear-gradient(to left, rgba(255,255,255,0.3), rgba(200,230,255,0.1), transparent)' }} />
+            {/* Core trail */}
+            <div className="absolute right-full top-1/2 -translate-y-1/2 h-[1px] w-12 rounded-full"
+              style={{ background: 'linear-gradient(to left, rgba(255,255,255,0.5), transparent)' }} />
+            {/* Comet nucleus */}
+            <div className="relative flex items-center justify-center">
+              <div className="absolute w-4 h-4 rounded-full bg-blue-100/5 blur-md" />
+              <div className="w-1.5 h-1.5 rounded-full bg-white/80 shadow-[0_0_3px_1px_rgba(180,220,255,0.3)]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
 
 // ─── Constellation Data ───────────────────────────────────────────────────────
 // Three constellations are displayed. Only ONE is the correct ancient pattern.
@@ -307,6 +412,14 @@ export default function Level3() {
       <div className="fixed inset-0 z-[2] opacity-25 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] pointer-events-none" />
       <div className="fixed top-0 inset-x-0 h-24 z-[3] bg-gradient-to-b from-[#02050f] to-transparent pointer-events-none" />
       <div className="fixed bottom-0 inset-x-0 h-24 z-[3] bg-gradient-to-t from-[#02050f] to-transparent pointer-events-none" />
+      {/* Nebula colour blobs — atmospheric depth */}
+      <div className="fixed inset-0 z-[2] pointer-events-none">
+        <div className="absolute top-[20%] left-[15%] w-[40vw] h-[30vh] rounded-full bg-[#1a3a6b]/20 blur-[80px]" style={{ animation: 'nebula-pulse 8s ease-in-out infinite' }} />
+        <div className="absolute bottom-[25%] right-[10%] w-[30vw] h-[25vh] rounded-full bg-[#6b1a3a]/15 blur-[60px]" style={{ animation: 'nebula-pulse 11s 3s ease-in-out infinite' }} />
+        <div className="absolute top-[55%] left-[55%] w-[25vw] h-[20vh] rounded-full bg-[#1a6b5a]/10 blur-[70px]" style={{ animation: 'nebula-pulse 9s 1.5s ease-in-out infinite' }} />
+      </div>
+      <TwinklingStars />
+      <ShootingComet />
 
       {/* Title */}
       <div className="relative z-20 mt-5 mb-1 flex flex-col items-center w-full">
@@ -388,34 +501,56 @@ export default function Level3() {
 
         {/* Constellation grid — pushed lower, full width */}
         <div className={`flex-1 transition-all duration-700 ${!lensInserted ? "invisible pointer-events-none" : "opacity-100"}`}>
-          <p className="font-cinzel text-[#6b9fd4]/50 text-xs tracking-[0.4em] uppercase text-center mb-4 mt-8">
-            {lensInserted ? "◈ Select a constellation pattern to trace ◈" : ""}
-          </p>
+          <div className="flex items-center justify-between mb-4 mt-8">
+            <p className="font-cinzel text-[#6b9fd4]/50 text-xs tracking-[0.4em] uppercase">
+              {lensInserted ? "◈ Select a constellation to trace ◈" : ""}
+            </p>
+            {/* Progress counter for Orion */}
+            {lensInserted && (
+              <div className="flex items-center gap-2">
+                <span className="text-[#6b9fd4]/40 text-xs font-cinzel tracking-widest uppercase">Connections:</span>
+                <div className="flex gap-1">
+                  {Array.from({ length: CORRECT_CONSTELLATION.correctConnections.length }).map((_, i) => (
+                    <div key={i} className={`w-2 h-2 rounded-full transition-all duration-500
+                      ${i < (solvedConnections["orion"]?.length || 0)
+                        ? "bg-[#d4af37] shadow-[0_0_8px_rgba(212,175,55,0.8)]"
+                        : "bg-[#1e3550]"}
+                    `} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-            {CONSTELLATIONS.map(con => (
-              <div key={con.id} className="flex flex-col gap-2">
-                <button
-                  onClick={() => lensInserted && setActiveConstellation(activeConstellation === con.id ? null : con.id)}
-                  className={`font-cinzel text-xs tracking-widest uppercase py-2 px-4 rounded-lg border transition-all duration-300
-                    ${activeConstellation === con.id
-                      ? "border-[#6b9fd4] bg-[#0a1828] text-[#b8d4f0] shadow-[0_0_15px_rgba(107,159,212,0.3)]"
-                      : "border-[#1e3550]/50 bg-black/30 text-[#6b9fd4]/50 hover:border-[#2b5070] hover:text-[#8aa1b8]"}
-                  `}
-                  disabled={!lensInserted}
-                >
-                  {con.name}
-                </button>
+            {CONSTELLATIONS.map(con => {
+              const isWinning = con.isCorrect && (solvedConnections[con.id]?.length || 0) === con.correctConnections.length;
+              return (
+                <div key={con.id} className="flex flex-col gap-2">
+                  <button
+                    onClick={() => lensInserted && setActiveConstellation(activeConstellation === con.id ? null : con.id)}
+                    className={`font-cinzel text-xs tracking-widest uppercase py-2 px-4 rounded-lg border transition-all duration-300
+                      ${activeConstellation === con.id
+                        ? "border-[#6b9fd4] bg-[#0a1828] text-[#b8d4f0] shadow-[0_0_15px_rgba(107,159,212,0.3)]"
+                        : "border-[#1e3550]/50 bg-black/30 text-[#6b9fd4]/50 hover:border-[#2b5070] hover:text-[#8aa1b8]"}
+                    `}
+                    disabled={!lensInserted}
+                  >
+                    {con.name}
+                  </button>
 
-                <ConstellationBoard
-                  constellation={con}
-                  active={activeConstellation === con.id}
-                  solvedConnections={solvedConnections[con.id] || []}
-                  wrongFlash={wrongFlash && activeConstellation === con.id}
-                  onConnectionMade={(isCorrect, pair) => handleConnectionMade(con.id, isCorrect, pair)}
-                />
-              </div>
-            ))}
+                  <div style={isWinning ? { animation: 'constellation-glow 2s ease-in-out infinite' } : {}}>
+                    <ConstellationBoard
+                      constellation={con}
+                      active={activeConstellation === con.id}
+                      solvedConnections={solvedConnections[con.id] || []}
+                      wrongFlash={wrongFlash && activeConstellation === con.id}
+                      onConnectionMade={(isCorrect, pair) => handleConnectionMade(con.id, isCorrect, pair)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
