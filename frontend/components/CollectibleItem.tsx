@@ -37,10 +37,12 @@ export default function CollectibleItem({ item, className = "" }: CollectibleIte
       `}
       title={item.name}
     >
-      {/* Glow follows the PNG shape via filter drop-shadow, no square background */}
+      {/* Item rendered clipped to its natural shape; rounded-full clips white PNG backgrounds */}
       <div className="relative z-10 flex items-center justify-center text-4xl sm:text-5xl transition-all group-hover:brightness-125">
         {item.iconSrc ? (
-          <img src={item.iconSrc} alt={item.name} className="w-12 h-12 object-contain" />
+          <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center">
+            <img src={item.iconSrc} alt={item.name} className="w-full h-full object-cover" />
+          </div>
         ) : (
           item.emojiFallback || "❓"
         )}

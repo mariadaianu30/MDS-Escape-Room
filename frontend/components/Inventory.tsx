@@ -67,7 +67,9 @@ export default function Inventory() {
                       `}
                     >
                       {item.iconSrc ? (
-                        <img src={item.iconSrc} alt={item.name} className="w-16 h-16 object-contain drop-shadow" />
+                        <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center">
+                          <img src={item.iconSrc} alt={item.name} className="w-full h-full object-cover" />
+                        </div>
                       ) : (
                         item.emojiFallback || "❓"
                       )}
@@ -81,9 +83,9 @@ export default function Inventory() {
             <div className="w-full md:w-2/5 p-6 md:p-10 bg-gradient-to-b from-[#0a0705] to-[#150e09] flex flex-col justify-center">
               {activeItem ? (
                 <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-300">
-                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-[#5c4026] bg-black/50 shadow-[0_0_30px_rgba(0,0,0,0.8)] flex items-center justify-center text-6xl mb-6">
+                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-[#5c4026] bg-black/50 shadow-[0_0_30px_rgba(0,0,0,0.8)] flex items-center justify-center text-6xl mb-6 overflow-hidden">
                      {activeItem.iconSrc ? (
-                        <img src={activeItem.iconSrc} alt={activeItem.name} className="w-20 h-20 object-contain" />
+                        <img src={activeItem.iconSrc} alt={activeItem.name} className="w-full h-full object-cover" />
                       ) : (
                         activeItem.emojiFallback || "❓"
                       )}

@@ -1,94 +1,490 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
+import CollectibleItem from "@/components/CollectibleItem";
+import Timer from "@/components/Timer";
+import confetti from "canvas-confetti";
 
+const GAME_DURATION = 30 * 60;
+
+// ─── Constellation Data ───────────────────────────────────────────────────────
+// Three constellations are displayed. Only ONE is the correct ancient pattern.
+// The player must identify and connect the stars of the CORRECT constellation.
+
+const CONSTELLATIONS = [
+  {
+    id: "orion",
+    name: "Orion — The Hunter",
+    isCorrect: true,
+    stars: [
+      { id: 0, x: 50, y: 12, label: "Betelgeuse" },
+      { id: 1, x: 35, y: 30, label: "Bellatrix*" },
+      { id: 2, x: 65, y: 30, label: "Mintaka" },
+      { id: 3, x: 50, y: 50, label: "Alnilam" },
+      { id: 4, x: 38, y: 68, label: "Saiph" },
+      { id: 5, x: 62, y: 68, label: "Rigel" },
+    ],
+    // The correct connections: pairs of star indices
+    correctConnections: [[0,1],[0,2],[1,3],[2,3],[3,4],[3,5]] as [number,number][],
+    clue: "The belt of three, the shoulders broad\u2014a giant stands guard in the sky.",
+  },
+  {
+    id: "cassiopeia",
+    name: "Cassiopeia — The Queen",
+    isCorrect: false,
+    stars: [
+      { id: 0, x: 15, y: 40, label: "Schedar" },
+      { id: 1, x: 30, y: 20, label: "Caph" },
+      { id: 2, x: 50, y: 40, label: "Cih" },
+      { id: 3, x: 70, y: 20, label: "Ruchbah" },
+      { id: 4, x: 85, y: 40, label: "Segin" },
+    ],
+    correctConnections: [[0,1],[1,2],[2,3],[3,4]] as [number,number][],
+    clue: "She sits upon her throne\u2014a W etched in silver.",
+  },
+  {
+    id: "ursamajor",
+    name: "Ursa Major — The Bear",
+    isCorrect: false,
+    stars: [
+      { id: 0, x: 20, y: 30, label: "Dubhe" },
+      { id: 1, x: 35, y: 22, label: "Merak" },
+      { id: 2, x: 50, y: 28, label: "Phecda" },
+      { id: 3, x: 65, y: 22, label: "Megrez" },
+      { id: 4, x: 78, y: 35, label: "Alioth" },
+      { id: 5, x: 72, y: 55, label: "Mizar" },
+      { id: 6, x: 58, y: 65, label: "Alkaid" },
+    ],
+    correctConnections: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]] as [number,number][],
+    clue: "The Great Plough\u2014seven stars marking the north.",
+  },
+];
+
+const CORRECT_CONSTELLATION = CONSTELLATIONS.find(c => c.isCorrect)!;
+
+// ─── Single Constellation Board ──────────────────────────────────────────────
+function ConstellationBoard({
+  constellation,
+  active,
+  onConnectionMade,
+  solvedConnections,
+  wrongFlash,
+}: {
+  constellation: typeof CONSTELLATIONS[0];
+  active: boolean;
+  onConnectionMade: (isCorrect: boolean, pair: [number, number]) => void;
+  solvedConnections: [number, number][];
+  wrongFlash: boolean;
+}) {
+  const [selected, setSelected] = useState<number | null>(null);
+
+  const alreadySolved = (a: number, b: number) =>
+    solvedConnections.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+
+  const isCorrectPair = (a: number, b: number) =>
+    constellation.correctConnections.some(
+      ([x, y]) => (x === a && y === b) || (x === b && y === a)
+    );
+
+  const handleClick = (id: number) => {
+    if (!active) return;
+    if (selected === null) { setSelected(id); return; }
+    if (selected === id) { setSelected(null); return; }
+    if (alreadySolved(selected, id)) { setSelected(id); return; }
+
+    onConnectionMade(isCorrectPair(selected, id), [selected, id] as [number, number]);
+    setSelected(null);
+  };
+
+  const allSolved =
+    constellation.correctConnections.length > 0 &&
+    constellation.correctConnections.every(([a, b]) => alreadySolved(a, b));
+
+  return (
+    <div
+      className={`relative w-full aspect-square rounded-xl border-2 overflow-hidden transition-all duration-500
+        ${active ? (wrongFlash ? "border-red-500 shadow-[0_0_30px_rgba(255,50,50,0.5)]" :
+            allSolved ? "border-[#d4af37] shadow-[0_0_50px_rgba(212,175,55,0.6)]" :
+            "border-[#2b5070] shadow-[0_0_20px_rgba(43,80,112,0.4)]")
+          : "border-[#1a2a3a]/60 opacity-50 grayscale"}
+      `}
+      style={{ background: "radial-gradient(ellipse at center, #07122a 0%, #020510 100%)" }}
+    >
+      <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
+
+      {/* SVG lines */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        {solvedConnections.map(([a, b], i) => {
+          const sa = constellation.stars[a];
+          const sb = constellation.stars[b];
+          if (!sa || !sb) return null;
+          return (
+            <line key={i}
+              x1={`${sa.x}%`} y1={`${sa.y}%`}
+              x2={`${sb.x}%`} y2={`${sb.y}%`}
+              stroke={allSolved ? "#d4af37" : "#6b9fd4"}
+              strokeWidth="2" opacity="0.85"
+              strokeLinecap="round"
+            />
+          );
+        })}
+      </svg>
+
+      {/* Stars */}
+      {constellation.stars.map(star => {
+        const isSel = selected === star.id;
+        const isConnected = solvedConnections.some(([a, b]) => a === star.id || b === star.id);
+        return (
+          <button key={star.id}
+            onClick={() => handleClick(star.id)}
+            className="absolute -translate-x-1/2 -translate-y-1/2 focus:outline-none group"
+            style={{ left: `${star.x}%`, top: `${star.y}%` }}
+            disabled={!active}
+          >
+            {isSel && <div className="absolute w-10 h-10 rounded-full bg-blue-300/20 animate-ping -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2" />}
+            <div className={`rounded-full transition-all duration-200 relative z-10
+              ${isSel ? "w-5 h-5 bg-white shadow-[0_0_20px_white]" :
+                isConnected ? "w-4 h-4 bg-[#d4af37] shadow-[0_0_10px_rgba(212,175,55,0.8)]" :
+                "w-3 h-3 bg-blue-100 shadow-[0_0_8px_rgba(150,200,255,0.6)] group-hover:w-4 group-hover:h-4"}
+            `} />
+            <span className={`absolute top-4 left-1/2 -translate-x-1/2 text-[9px] whitespace-nowrap font-cinzel
+              ${isSel ? "text-white" : isConnected ? "text-[#d4af37]/80" : "text-blue-200/40"}
+            `}>{star.label}</span>
+          </button>
+        );
+      })}
+
+      {allSolved && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+          <p className="font-cinzel text-[#d4af37] text-sm tracking-[0.3em] drop-shadow-[0_0_15px_rgba(212,175,55,1)]">✦ ALIGNED ✦</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Level 3 ─────────────────────────────────────────────────────────────
 export default function Level3() {
   const router = useRouter();
-  const { addItem, hasItem } = useInventory();
-  const [constellationSolved, setConstellationSolved] = useState(false);
+  const { removeItem, equippedItem, setEquippedItem, items } = useInventory();
 
-  const handlePickUpLens = () => {
-    if (!hasItem("lens_stellar")) {
-      addItem({
-        id: "lens_stellar",
-        name: "Stellar Lens",
-        description: "A finely cut lens that seems to refract starlight in unusual patterns. It might fit perfectly into a telescope.",
-        emojiFallback: "🔭"
-      });
-      alert("You picked up the Stellar Lens!");
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [gameOverReason, setGameOverReason] = useState<"time" | "mistakes" | null>(null);
+  const [showLevelComplete, setShowLevelComplete] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
+  const [lensInserted, setLensInserted] = useState(false);
+  const [activeConstellation, setActiveConstellation] = useState<string | null>(null);
+  const [solvedConnections, setSolvedConnections] = useState<Record<string, [number, number][]>>({});
+  const [wrongFlash, setWrongFlash] = useState(false);
+  const [wrongPicks, setWrongPicks] = useState(0);
+  const [gameId, setGameId] = useState(0);
+
+  const hasLens = items.some(i => i.id === "lens_stellar");
+
+  const showNotification = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  useEffect(() => {
+    const endTimeStr = localStorage.getItem("escapeRoomEndTime");
+    if (!endTimeStr) { router.push("/"); return; }
+  }, [router]);
+
+  useEffect(() => {
+    if (equippedItem) {
+      const item = items.find(i => i.id === equippedItem);
+      if (item?.iconSrc) document.body.style.cursor = `url(${item.iconSrc}), auto`;
+    } else {
+      document.body.style.cursor = "auto";
+    }
+    return () => { document.body.style.cursor = "auto"; };
+  }, [equippedItem, items]);
+
+  useEffect(() => {
+    if (isGameOver || showLevelComplete) return;
+    const interval = setInterval(() => {
+      const endTimeStr = localStorage.getItem("escapeRoomEndTime");
+      if (!endTimeStr) return;
+      const remaining = Math.max(0, Math.floor((parseInt(endTimeStr, 10) - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+        setGameOverReason("time");
+        setIsGameOver(true);
+        setTimeout(() => restartGame(), 4000);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isGameOver, showLevelComplete, gameId]);
+
+  const handleTelescopeClick = () => {
+    if (lensInserted) return;
+    if (equippedItem === "lens_stellar") {
+      setLensInserted(true);
+      removeItem("lens_stellar");
+      setEquippedItem(null);
+      showNotification("The lens clicks into place. The star map flickers to life...");
+    } else {
+      showNotification("The telescope lacks its focusing lens. Search the observatory carefully.");
     }
   };
 
+  const handleConnectionMade = (constellationId: string, isCorrect: boolean, pair: [number, number]) => {
+    if (!isCorrect) {
+      // Wrong pair: flash red, count mistake
+      setWrongFlash(true);
+      setTimeout(() => setWrongFlash(false), 600);
+      const newWrong = wrongPicks + 1;
+      setWrongPicks(newWrong);
+      showNotification(newWrong >= 3
+        ? "Too many wrong connections. The star map resets..."
+        : `That connection is wrong. Try again. (${3 - newWrong} attempts left)`
+      );
+      if (newWrong >= 3) {
+        setTimeout(() => {
+          setSolvedConnections({});
+          setWrongPicks(0);
+          setActiveConstellation(null);
+        }, 1500);
+      }
+      return;
+    }
+
+    // Correct pair
+    const prev = solvedConnections[constellationId] || [];
+    const updated = { ...solvedConnections, [constellationId]: [...prev, pair] };
+    setSolvedConnections(updated);
+
+    const con = CONSTELLATIONS.find(c => c.id === constellationId)!;
+    const done = con.correctConnections.every(([a, b]) =>
+      updated[constellationId]?.some(([x, y]) => (x === a && y === b) || (x === b && y === a))
+    );
+
+    if (done) {
+      if (con.isCorrect) {
+        // WIN!
+        const savedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
+        if (savedLevel < 3) localStorage.setItem("escapeRoomCompletedLevel", "3");
+        confetti({ particleCount: 200, spread: 160, origin: { y: 0.5 }, colors: ["#b8d4f0", "#d4af37", "#ffffff"] });
+        setTimeout(() => setShowLevelComplete(true), 1800);
+      } else {
+        // Wrong constellation completed: reset it
+        showNotification(`That is ${con.name}, not the lost constellation. Study the clue again.`);
+        setTimeout(() => setSolvedConnections(prev => ({ ...prev, [constellationId]: [] })), 1200);
+      }
+    }
+  };
+
+  const restartGame = () => {
+    setIsGameOver(false);
+    setGameOverReason(null);
+    setLensInserted(false);
+    setActiveConstellation(null);
+    setSolvedConnections({});
+    setWrongPicks(0);
+    setShowLevelComplete(false);
+    setGameId(prev => prev + 1);
+  };
+
+  const formatElapsed = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
   return (
-    <main className="min-h-screen relative flex flex-col items-center justify-center bg-[#05060a] text-[#8aa1b8] font-cormorant select-none overflow-hidden pb-32">
-      
-      {/* Dynamic Starry Background */}
-      <div 
-        className="absolute inset-0 z-0 bg-cover bg-center opacity-60 mix-blend-screen"
-        style={{ backgroundImage: 'radial-gradient(circle at top, #1a2336 0%, #05060a 100%)' }}
-      />
-      <div className="absolute inset-0 z-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
+    <main className="min-h-screen relative overflow-hidden bg-[#05060a] font-cormorant flex flex-col items-center select-none">
 
-      {/* Header */}
-      <h1 className="relative z-10 text-4xl md:text-6xl font-cinzel font-bold text-[#b8d4f0] tracking-widest drop-shadow-[0_0_15px_rgba(184,212,240,0.5)] mb-8">
-        Level 3 — The Astronomer's Tower
-      </h1>
+      {/* Background */}
+      <div className="fixed inset-0 z-0 bg-cover bg-center brightness-[0.55]"
+        style={{ backgroundImage: "url(/images/observatory.png)" }} />
+      <div className="fixed inset-0 z-[1] bg-[#02050f]/50 pointer-events-none" />
+      <div className="fixed inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_30%,#02050f_100%)] pointer-events-none" />
+      <div className="fixed inset-0 z-[2] opacity-25 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] pointer-events-none" />
+      <div className="fixed top-0 inset-x-0 h-24 z-[3] bg-gradient-to-b from-[#02050f] to-transparent pointer-events-none" />
+      <div className="fixed bottom-0 inset-x-0 h-24 z-[3] bg-gradient-to-t from-[#02050f] to-transparent pointer-events-none" />
 
-      {/* Interactive Hub */}
-      <div className="relative z-10 w-full max-w-5xl flex flex-col items-center justify-center p-8 border-4 border-[#2b3a53] bg-black/60 rounded-xl shadow-[0_0_50px_rgba(43,58,83,0.8)] backdrop-blur-md">
-        
-        <p className="text-2xl text-center mb-12 italic max-w-3xl leading-relaxed">
-          The cold wind howls through the open arches. A massive bronze telescope points toward an empty void in the sky. To unlock the passage, you must align the lenses with the lost constellation.
-        </p>
-
-        {/* Andra's Implementation Space */}
-        <div className="w-full flex flex-col md:flex-row items-center justify-center gap-10">
-          
-          {/* Action 1: Pick up Evidence (Inventory System usage) */}
-          <div className="flex flex-col items-center bg-[#111824] p-6 rounded border border-[#3b4c6b] hover:border-[#6b8bad] transition-colors cursor-pointer" onClick={handlePickUpLens}>
-             <div className="text-6xl mb-4 animate-pulse">🔭</div>
-             <p className="font-cinzel text-xl text-[#b8d4f0]">Inspect the Desk</p>
-             {hasItem("lens_stellar") && (
-                <p className="text-sm text-green-400 mt-2">Lens collected!</p>
-             )}
-          </div>
-
-          {/* Action 2: Puzzle Validation */}
-          <div className="flex flex-col items-center bg-[#111824] p-6 rounded border border-[#3b4c6b] relative">
-             <div className="text-6xl mb-4">🌌</div>
-             <p className="font-cinzel text-xl text-[#b8d4f0]">The Telescope</p>
-             
-             {!hasItem("lens_stellar") ? (
-                <p className="text-sm text-red-400 mt-2 max-w-[200px] text-center">It lacks a focusing lens. Search the room.</p>
-             ) : (
-                <button 
-                  className="mt-4 px-6 py-2 bg-[#2b3a53] text-[#b8d4f0] border border-[#6b8bad] rounded font-bold hover:bg-[#3b4c6b]"
-                  onClick={() => setConstellationSolved(true)}
-                >
-                  Align Stars
-                </button>
-             )}
-          </div>
-
+      {/* Title */}
+      <div className="relative z-20 mt-5 mb-1 flex flex-col items-center w-full">
+        <div className="flex items-center gap-3 mb-1 opacity-40">
+          <div className="h-px w-12 md:w-24 bg-gradient-to-r from-transparent to-[#6b9fd4]" />
+          <span className="font-cinzel text-[9px] tracking-[0.5em] text-[#6b9fd4] uppercase">Chamber III</span>
+          <div className="h-px w-12 md:w-24 bg-gradient-to-l from-transparent to-[#6b9fd4]" />
         </div>
-
+        <h1 className="font-cinzel text-3xl md:text-5xl text-[#b8d4f0] text-center drop-shadow-[0_0_20px_rgba(107,159,212,0.5)] tracking-widest">
+          The Astronomer's Tower
+        </h1>
       </div>
 
-      {constellationSolved && (
-         <div className="relative z-10 mt-12 animate-in fade-in slide-in-from-bottom-5 duration-700">
-            <button 
-              onClick={() => router.push('/level4')}
-              className="text-2xl font-cinzel font-bold text-black bg-[#b8d4f0] px-12 py-4 rounded shadow-[0_0_40px_rgba(184,212,240,0.6)] uppercase tracking-widest hover:scale-105 transition-all animate-pulse"
-            >
-              Enter Level 4
-            </button>
-         </div>
+      {!showLevelComplete && !isGameOver && <Timer key={`timer-${gameId}`} timeLeft={timeLeft} />}
+
+      {/* ─── Game Layout ─── */}
+      <div className="relative z-10 w-full flex flex-col lg:flex-row items-start justify-center gap-6 px-4 md:px-10 mt-4 pb-4">
+
+        {/* LEFT PANEL: Story, Clue, Telescope */}
+        <div className="flex flex-col gap-4 w-full lg:max-w-xs shrink-0">
+
+          {/* Story / Lore */}
+          <div className="bg-black/50 backdrop-blur-sm border border-[#1e3550] rounded-xl p-5">
+            <h2 className="font-cinzel text-[#6b9fd4] text-sm tracking-[0.3em] uppercase mb-3">The Archivist's Note</h2>
+            <p className="text-[#8aa1b8] text-base leading-relaxed italic">
+              "The passage opens only when the Ancients' lost constellation is traced in full upon the celestial sphere.
+              Three patterns are etched on the dome — but only one unlocks the seal.
+              Study the <span className="text-[#d4af37] not-italic font-bold">clue on the scroll</span>, then insert the lens and align the correct stars."
+            </p>
+          </div>
+
+          {/* Clue scroll */}
+          <div className="bg-[#0a0e1a]/70 border border-[#d4af37]/30 rounded-xl p-5">
+            <h2 className="font-cinzel text-[#d4af37] text-sm tracking-[0.3em] uppercase mb-3">Ancient Scroll</h2>
+            <p className="text-[#e5d8b3] text-lg italic leading-relaxed">
+              "{CORRECT_CONSTELLATION.clue}"
+            </p>
+          </div>
+
+          {/* Telescope */}
+          <div
+            onClick={handleTelescopeClick}
+            className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all duration-500
+              ${lensInserted
+                ? "border-[#6b9fd4] bg-[#091628]/80 shadow-[0_0_30px_rgba(107,159,212,0.3)]"
+                : "border-[#1e3550]/60 bg-black/40 hover:border-[#2b5070] hover:shadow-[0_0_15px_rgba(43,80,112,0.3)]"}
+              backdrop-blur-sm
+            `}
+          >
+            <img
+              src="/images/telescope.png"
+              alt="Telescope"
+              className={`w-20 h-20 object-contain drop-shadow-[0_0_10px_rgba(0,0,0,0.8)] transition-all duration-500
+                ${lensInserted ? "drop-shadow-[0_0_20px_rgba(107,159,212,0.6)] brightness-110" : "brightness-75"}
+              `}
+            />
+            <div>
+              <p className="font-cinzel text-[#b8d4f0] text-base tracking-wider">Great Telescope</p>
+              {!lensInserted
+                ? <p className="text-xs text-red-400/70 mt-1 font-cinzel">⚠ Lens missing — search the room</p>
+                : <p className="text-xs text-[#6b9fd4] mt-1 font-cinzel">✦ Lens installed — chart the stars</p>
+              }
+            </div>
+          </div>
+
+          {/* Instructions */}
+          {lensInserted && (
+            <div className="bg-black/40 border border-[#1e3550]/50 rounded-xl p-4 animate-in fade-in duration-500">
+              <h2 className="font-cinzel text-[#6b9fd4] text-xs tracking-[0.3em] uppercase mb-2">How to Play</h2>
+              <ul className="text-[#8aa1b8] text-sm space-y-1 list-none">
+                <li>◈ Select a constellation from the 3 panels</li>
+                <li>◈ Click two stars to draw a line between them</li>
+                <li>◈ Complete the correct constellation pattern</li>
+                <li>◈ Wrong pattern = it resets. 3 wrong lines = full reset</li>
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Constellation grid — pushed lower, full width */}
+        <div className={`flex-1 transition-all duration-700 ${!lensInserted ? "invisible pointer-events-none" : "opacity-100"}`}>
+          <p className="font-cinzel text-[#6b9fd4]/50 text-xs tracking-[0.4em] uppercase text-center mb-4 mt-8">
+            {lensInserted ? "◈ Select a constellation pattern to trace ◈" : ""}
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+            {CONSTELLATIONS.map(con => (
+              <div key={con.id} className="flex flex-col gap-2">
+                <button
+                  onClick={() => lensInserted && setActiveConstellation(activeConstellation === con.id ? null : con.id)}
+                  className={`font-cinzel text-xs tracking-widest uppercase py-2 px-4 rounded-lg border transition-all duration-300
+                    ${activeConstellation === con.id
+                      ? "border-[#6b9fd4] bg-[#0a1828] text-[#b8d4f0] shadow-[0_0_15px_rgba(107,159,212,0.3)]"
+                      : "border-[#1e3550]/50 bg-black/30 text-[#6b9fd4]/50 hover:border-[#2b5070] hover:text-[#8aa1b8]"}
+                  `}
+                  disabled={!lensInserted}
+                >
+                  {con.name}
+                </button>
+
+                <ConstellationBoard
+                  constellation={con}
+                  active={activeConstellation === con.id}
+                  solvedConnections={solvedConnections[con.id] || []}
+                  wrongFlash={wrongFlash && activeConstellation === con.id}
+                  onConnectionMade={(isCorrect, pair) => handleConnectionMade(con.id, isCorrect, pair)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Collectible: Stellar Lens — circular display */}
+      {!hasLens && !lensInserted && (
+        <CollectibleItem
+          item={{
+            id: "lens_stellar",
+            name: "Stellar Lens",
+            description: "A finely cut brass lens. It refracts starlight in unusual patterns.",
+            iconSrc: "/images/stellar_lens.png"
+          }}
+          className="fixed bottom-16 right-16 z-20 opacity-25 hover:opacity-90 transition-opacity"
+        />
       )}
 
-      {/* AI Integration va veni aici mai târziu */}
+      {/* Level Complete */}
+      {showLevelComplete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-1000">
+          <div className="p-12 border-4 border-[#6b9fd4] bg-[#05101e]/95 text-center rounded-2xl shadow-[0_0_150px_rgba(107,159,212,0.4)] max-w-2xl flex flex-col items-center">
+            <h1 className="text-5xl md:text-7xl font-cinzel font-bold text-[#b8d4f0] mb-6">Chamber Unlocked</h1>
+            <p className="text-xl text-[#8aa1b8] mb-6 font-cormorant leading-relaxed">
+              Orion blazes across the dome. The ancient seal hums and releases with a deep resonant tone.
+            </p>
+            <div className="bg-black/60 p-6 rounded-lg border border-[#2b4a7e] mb-8 w-full">
+              <p className="text-2xl text-[#6b9fd4] font-bold mb-2">Escaped in {formatElapsed(GAME_DURATION - timeLeft)}!</p>
+              <p className="text-lg text-[#8aa1b8]">Time remaining: {formatElapsed(timeLeft)}</p>
+            </div>
+            <button onClick={() => router.push("/level4")}
+              className="text-xl text-[#05060a] bg-[#b8d4f0] hover:bg-white transition-colors font-cinzel font-bold px-8 py-4 rounded-xl uppercase tracking-widest animate-pulse">
+              Proceed to Level 4
+            </button>
+          </div>
+        </div>
+      )}
 
+      {/* Game Over */}
+      {isGameOver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 backdrop-blur-lg animate-in fade-in duration-500">
+          <div className="p-12 border-2 border-red-800 bg-black/90 text-center rounded shadow-[0_0_150px_rgba(200,0,0,0.6)] max-w-lg">
+            <h1 className="text-6xl font-cinzel font-bold text-red-500 mb-6 drop-shadow-[0_0_20px_red]">
+              {gameOverReason === "time" ? "Time's Up" : "Game Over"}
+            </h1>
+            <p className="text-2xl text-red-300 font-cormorant leading-relaxed">
+              {gameOverReason === "time"
+                ? "The stars fade. The observatory grows cold. Restarting..."
+                : "The star map goes dark. Restarting..."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Notification */}
+      {notification && (
+        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[80] bg-[#05101e]/95 border border-[#6b9fd4] px-8 py-4 rounded-xl shadow-[0_0_30px_rgba(107,159,212,0.4)] animate-in fade-in slide-in-from-bottom-5 duration-300 pointer-events-none max-w-lg">
+          <p className="text-[#b8d4f0] font-cinzel text-base tracking-widest text-center">{notification}</p>
+        </div>
+      )}
+
+      {/* Equipped HUD */}
+      {equippedItem && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] bg-black/60 backdrop-blur border border-[#6b9fd4]/50 px-6 py-2 rounded-full flex items-center gap-3">
+          <span className="text-[#8aa1b8] text-xs font-cinzel tracking-widest uppercase">Equipped:</span>
+          <span className="text-[#b8d4f0] text-sm font-bold font-cinzel uppercase">
+            {items.find(i => i.id === equippedItem)?.name}
+          </span>
+        </div>
+      )}
 
     </main>
   );

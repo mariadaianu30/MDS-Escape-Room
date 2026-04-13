@@ -206,7 +206,7 @@ export default function Level1() {
             <div className="absolute inset-0 bg-black/50 pointer-events-none rounded-2xl"></div>
 
             <div className="relative z-10 w-full flex flex-col items-center">
-              <SudokuGrid key={`sudoku-${gameId}`} onSolved={handleSudokuSolved} onGameOver={handleMistakesGameOver} />
+              <SudokuGrid key={`sudoku-${gameId}`} onReady={(code) => { if (code.length === 9) setExtractedCode(code[0] + code[2] + code[6] + code[8]); }} onSolved={handleSudokuSolved} onGameOver={handleMistakesGameOver} />
             </div>
           </div>
         </div>
