@@ -307,9 +307,9 @@ export default function Level4Page() {
           padding: 2rem 1rem 4rem; position: relative; overflow-x: hidden;
         }
         .header { text-align: center; margin-bottom: 2rem; }
-        .level-badge { font-family: 'Cinzel', serif; font-size: 0.65rem; letter-spacing: 0.3em; color: var(--gold-dim); text-transform: uppercase; margin-bottom: 0.6rem; }
+        .level-badge { font-family: 'Cinzel', serif; font-size: 20px; letter-spacing: 0.3em; color: var(--gold-dim); text-transform: uppercase; margin-bottom: 0.6rem; }
         .level-title { font-family: 'Cinzel', serif; font-size: clamp(1.8rem, 5vw, 3rem); font-weight: 900; color: var(--gold); text-shadow: var(--glow); line-height: 1.1; letter-spacing: 0.05em; }
-        .level-subtitle { font-size: 1rem; font-style: italic; color: var(--muted); margin-top: 0.5rem; }
+        .level-subtitle { font-size: 1rem; font-style: italic; color:; margin-top: 15px; font-weight: 300;}
         .divider { width: 200px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-dim), transparent); margin: 1rem auto 0; }
         .card { background: var(--stone); border: 1px solid var(--border); border-radius: 4px; padding: 2.5rem 2rem; max-width: 680px; width: 100%; position: relative; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
         .card-title { font-family: 'Cinzel', serif; font-size: 1.1rem; color: var(--gold); letter-spacing: 0.1em; margin-bottom: 1rem; }
@@ -359,7 +359,7 @@ export default function Level4Page() {
         .parchment-col .card-body { 
           font-size: 1.05rem; 
           line-height: 1.85; 
-          color: #2a1a08; /* Un maro foarte închis în loc de deschis */
+          color: #ffffff; /* Un crem deschis */
           font-weight: 400; /* Poate puțin mai gros ca să se citească mai bine */
         }
 
@@ -367,7 +367,7 @@ export default function Level4Page() {
         .parchment-col .card-title { 
           font-family: 'Cinzel', serif; 
           font-size: 1.15rem; 
-          color: #5a3e1a; /* Un aurit/maro mai închis */
+          color: #f5e8d0; 
           letter-spacing: 0.1em; 
           margin-bottom: 1rem; 
         }
@@ -382,8 +382,8 @@ export default function Level4Page() {
           color: #2a1a08; /* Textul scris de jucător să fie maro închis */
           border-color: rgba(90, 70, 40, 0.5);
         }
-        .morse-display { background: rgba(6,4,2,0.55); border: 1px solid rgba(61,47,30,0.5); border-left: 3px solid var(--rust); border-radius: 2px; padding: 1.2rem 1.4rem; font-family: 'Courier New', monospace; font-size: clamp(0.95rem, 2.5vw, 1.25rem); color: #e8d8a0; letter-spacing: 0.15em; word-break: break-all; line-height: 2; text-shadow: 0 0 8px rgba(232,216,160,0.4); }
-        .morse-label { font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.25em; color: var(--rust); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .morse-display { background: rgba(6,4,2,0.55); border: 1px solid rgba(185, 180, 173, 0.5); border-left: 3px solid var(--rust); border-radius: 2px; padding: 1.2rem 1.4rem; font-family: 'Courier New', monospace; font-size: clamp(0.95rem, 2.5vw, 1.25rem); color: #e8d8a0; letter-spacing: 0.15em; word-break: break-all; line-height: 2; text-shadow: 0 0 8px rgba(232,216,160,0.4); }
+        .morse-label { font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.25em; color: white; text-transform: uppercase; margin-bottom: 0.5rem; }
         .input-row { display: flex; gap: 0.75rem; }
         .decode-input { flex: 1; background: rgba(10,7,4,0.5); border: 1px solid rgba(61,47,30,0.6); border-radius: 2px; padding: 0.8rem 1.2rem; color: #e5dcc8; font-family: 'Cinzel', serif; font-size: 1rem; letter-spacing: 0.15em; text-transform: uppercase; outline: none; transition: border-color 0.2s; }
         .decode-input:focus { border-color: var(--gold-dim); box-shadow: 0 0 0 2px rgba(201,168,76,0.15); }
