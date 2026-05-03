@@ -101,7 +101,13 @@ export default function Level4Page() {
   useEffect(() => {
     if (cooldown > 0) {
       intervalRef.current = setInterval(() => {
-        setCooldown((c) => (c <= 1 ? 0 : c - 1));
+        setCooldown((c) => {
+          if (c <= 1) {
+            setHint(null); // <--- ADAUGĂ ACEASTĂ LINIE: Șterge hint-ul când cooldown-ul expiră
+            return 0;
+          }
+          return c - 1;
+        });
       }, 1000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
@@ -235,8 +241,8 @@ export default function Level4Page() {
         .morse-display { background: rgba(6,4,2,0.55); border: 1px solid rgba(185, 180, 173, 0.5); border-left: 3px solid var(--rust); border-radius: 2px; padding: 0.6rem 1.4rem; font-family: 'Courier New', monospace; font-size: clamp(0.95rem, 2.5vw, 1.1rem); color: #e8d8a0; letter-spacing: 0.15em; word-break: break-all; line-height: 2; text-shadow: 0 0 8px rgba(232,216,160,0.4); }
         .morse-label { font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.25em; color: white; text-transform: uppercase; margin-bottom: 0.5rem; }
         .input-row { display: flex; gap: 0.75rem; }
-        .decode-input { flex: 1; background: rgba(10,7,4,0.5); border: 1px solid rgba(61,47,30,0.6); border-radius: 2px; padding: 0.8rem 1.2rem; color: #2a1a08; font-family: 'Cinzel', serif; font-size: 1rem; letter-spacing: 0.15em; text-transform: uppercase; outline: none; transition: border-color 0.2s; }
-        .decode-input::placeholder { color: rgba(42, 26, 8, 0.6); font-size: 0.85rem; }
+        .decode-input { flex: 1; background: rgba(10,7,4,0.5); border: 1px solid rgba(61,47,30,0.6); border-radius: 2px; padding: 0.8rem 1.2rem; color: #ffffff; font-family: 'Cinzel', serif; font-size: 1rem; letter-spacing: 0.15em; text-transform: uppercase; outline: none; transition: border-color 0.2s; }
+        .decode-input::placeholder { color: rgba(255, 255, 255, 0.7); font-size: 0.85rem; }
         
         .btn-submit { padding: 0.8rem 1.6rem; background: var(--rust); border: none; color: #f5e8d0; font-family: 'Cinzel', serif; font-size: 0.75rem; letter-spacing: 0.2em; cursor: pointer; border-radius: 2px; transition: background 0.2s; }
         .btn-submit:hover { background: #a3452f; }
@@ -335,25 +341,36 @@ export default function Level4Page() {
                     </div>
                   )
                 )}
+                              
+              <div className="hint-section">
+                {/* Afișăm input-ul doar dacă NU suntem în cooldown și nu se încarcă deja un răspuns */}
+                {cooldown === 0 && !hintLoading && (
+                    <input 
+                      type="text"
+                      placeholder="Ask the spirits..."
+                      value={hintQuestion}
+                      onChange={(e) => setHintQuestion(e.target.value)}
+                      className="decode-input"
+                      style={{ color: 'var(--text)', marginBottom: '0.5rem' }}
+                    />
+                )}
 
-                <div className="hint-section">
-                   {/* Interfața AI Hint - Question Input */}
-                   {!hint && !hintLoading && cooldown === 0 && (
-                      <input 
-                        type="text"
-                        placeholder="Ask the spirits..."
-                        value={hintQuestion}
-                        onChange={(e) => setHintQuestion(e.target.value)}
-                        className="decode-input"
-                        style={{ color: 'var(--text)', marginBottom: '0.5rem' }}
-                      />
-                   )}
-                   <button className="btn-hint" onClick={handleHint} disabled={cooldown > 0 || hintLoading || !hintQuestion.trim()}>
-                     🕯 ASK THE SPIRITS
-                   </button>
-                   {hint && <div className="hint-bubble"><strong>Spirit Voice:</strong> {hint}</div>}
-                </div>
+                <button 
+                  className="btn-hint" 
+                  onClick={handleHint} 
+                  disabled={cooldown > 0 || hintLoading || !hintQuestion.trim()}
+                >
+                  {cooldown > 0 ? `WAIT (${cooldown}s)` : "🕯 ASK THE SPIRITS"}
+                </button>
+
+                {/* Hint-ul va fi vizibil doar cât timp cooldown-ul este activ */}
+                {hint && cooldown > 0 && (
+                  <div className="hint-bubble">
+                    <strong>Spirit Voice:</strong> {hint}
+                  </div>
+                )}
               </div>
+            </div>
 
               <div className="morsemap-col">
                 <p className="morsemap-title">Morse Code Key</p>
