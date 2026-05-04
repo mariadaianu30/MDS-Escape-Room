@@ -122,12 +122,12 @@ export default function Inventory() {
               )}
             </div>
 
-            <button 
+            {/* <button 
                 onClick={() => { clearInventory(); setIsOpen(false); }}
                 className="absolute bottom-4 right-4 text-xs text-red-900 hover:text-red-600 uppercase tracking-widest font-cinzel opacity-40 hover:opacity-100"
             >
                 [Debug: Clear Storage]
-            </button>
+            </button> */}
           </div>
         </div>
       )}
