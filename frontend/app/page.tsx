@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight } from "lucide-react";
+import { useInventory } from "@/lib/InventoryContext";
 import "./particles.css";
 
 // Floating dust motes — purely decorative
@@ -29,6 +30,7 @@ const LABELS = [
 
 export default function IntroHome() {
   const router = useRouter();
+  const { clearInventory } = useInventory();
   const [completedLevel, setCompletedLevel] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -132,6 +134,7 @@ export default function IntroHome() {
        
        const GAME_DURATION = 30 * 60; 
        localStorage.setItem("escapeRoomEndTime", (Date.now() + GAME_DURATION * 1000).toString());
+       clearInventory();
        
        setTimeout(() => {
           router.push(`/level1`);
