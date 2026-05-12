@@ -23,20 +23,13 @@ export default function Level1() {
   const hasCompass = hasItem("brass_compass_lvl1");
   const hasEraser = hasItem("chalk_eraser_lvl1");
   const [gameId, setGameId] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
-  const timeLeftRef = useRef(timeLeft);
-
-  useEffect(() => {
-    timeLeftRef.current = timeLeft;
-  }, [timeLeft]);
-
   const [extractedCode, setExtractedCode] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [showLevelComplete, setShowLevelComplete] = useState(false);
   const [isBlackboardCleaned, setIsBlackboardCleaned] = useState(false);
   const [isLockUnjammed, setIsLockUnjammed] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
-
+  
   const showNotification = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
@@ -44,49 +37,6 @@ export default function Level1() {
 
   // Game Over states
   const [isGameOver, setIsGameOver] = useState(false);
-  const [gameOverReason, setGameOverReason] = useState<"mistakes" | "time" | null>(null);
-
-  const syncGameProgress = async (remaining: number, level: number) => {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-    
-    const { error } = await supabase
-      .from('player')
-      .update({ remaining_time: remaining, current_level: level })
-      .eq('id', authData.user.id);
-      
-    if (error) {
-      console.error("Error syncing progress:", error);
-    }
-  };
-
-  // Initial Load Timer & Supabase Sync
-  useEffect(() => {
-    async function initTimer() {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) {
-        router.push("/");
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('player')
-        .select('remaining_time, current_level')
-        .eq('id', authData.user.id)
-        .single();
-
-      if (error) {
-        console.error("Error fetching progress:", error);
-      } else if (data) {
-        const remaining = data.remaining_time ?? GAME_DURATION;
-        setTimeLeft(remaining);
-      } else {
-        setTimeLeft(GAME_DURATION);
-      }
-    }
-    
-    initTimer();
-  }, [router]);
 
   // Custom Mouse Cursor when Item Equipped!
   useEffect(() => {
@@ -100,41 +50,6 @@ export default function Level1() {
     }
     return () => { document.body.style.cursor = 'auto'; };
   }, [equippedItem, items]);
-
-  // Global Timer Loop (Local Countdown)
-  useEffect(() => {
-    if (isUnlocked || isGameOver || showLevelComplete) return;
-
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleTimeUp();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isUnlocked, isGameOver, showLevelComplete, gameId]);
-
-  // Heartbeat Supabase Sync (Every 30 seconds)
-  useEffect(() => {
-    if (isUnlocked || isGameOver || showLevelComplete) return;
-
-    const syncInterval = setInterval(() => {
-       syncGameProgress(timeLeftRef.current, 1);
-    }, 30000);
-
-    return () => clearInterval(syncInterval);
-  }, [isUnlocked, isGameOver, showLevelComplete]);
-
-  const handleTimeUp = () => {
-    setGameOverReason("time");
-    setIsGameOver(true);
-    setTimeout(() => restartGame(), 4000);
-  };
 
   const handleBlackboardClick = () => {
     if (isBlackboardCleaned) return;
@@ -178,8 +93,8 @@ export default function Level1() {
       localStorage.setItem("escapeRoomCompletedLevel", "1");
     }
 
-    // FINAL SYNC (advance to level 2)
-    await syncGameProgress(timeLeftRef.current, 2);
+    // FINAL SYNC handled by next level load or manually if needed
+
 
     confetti({
       particleCount: 200,
@@ -194,24 +109,15 @@ export default function Level1() {
   };
 
   const handleMistakesGameOver = () => {
-    setGameOverReason("mistakes");
     setIsGameOver(true);
     setTimeout(() => restartGame(), 4000);
   };
 
   const restartGame = () => {
     setIsGameOver(false);
-    setGameOverReason(null);
     setExtractedCode(null);
     setIsUnlocked(false);
     setShowLevelComplete(false);
-
-    if (gameOverReason === "time") {
-      // Reset global clock locally and in DB
-      setTimeLeft(GAME_DURATION);
-      syncGameProgress(GAME_DURATION, 1);
-    }
-
     setGameId((prev) => prev + 1);
   };
 
@@ -222,7 +128,6 @@ export default function Level1() {
   };
 
   const handleSaveAndExit = async () => {
-    await syncGameProgress(timeLeftRef.current, 1);
     router.push("/lobby");
   };
 
@@ -257,8 +162,7 @@ export default function Level1() {
         </h1>
       </div>
 
-      {/* Timer */}
-      {!showLevelComplete && !isGameOver && <Timer key={`timer-${gameId}`} timeLeft={timeLeft} />}
+      {/* Timer is now rendered in layout.tsx globally */}
 
       <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-12 md:gap-24 overflow-hidden mt-6">
 
@@ -383,8 +287,7 @@ export default function Level1() {
             </p>
 
             <div className="bg-black/60 p-6 rounded-lg border border-[#3c2a1a] mb-8 w-full shadow-[inset_0_0_30px_black]">
-              <p className="text-2xl text-[#d4af37] font-bold mb-2">You escaped in {formatElapsed(GAME_DURATION - timeLeft)}!</p>
-              <p className="text-lg text-[#8c7a6b]">Time remaining for the full game: {formatElapsed(timeLeft)}</p>
+              <p className="text-2xl text-[#d4af37] font-bold mb-2">You escaped the Mathematical Library!</p>
             </div>
 
             <button
@@ -401,12 +304,10 @@ export default function Level1() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 backdrop-blur-lg animate-in fade-in duration-500">
           <div className="p-12 border-2 border-red-800 bg-black/90 text-center rounded shadow-[0_0_150px_rgba(200,0,0,0.6)] max-w-lg flex flex-col items-center">
             <h1 className="text-6xl font-cinzel font-bold text-red-500 mb-6 drop-shadow-[0_0_20px_red]">
-              {gameOverReason === "time" ? "Time's Up" : "Game Over"}
+              Game Over
             </h1>
             <p className="text-2xl text-red-300 mb-8 font-cormorant leading-relaxed">
-              {gameOverReason === "time"
-                ? "The countdown has reached zero. The doors seal shut forever. Restarting timeline..."
-                : "The mechanism has locked up due to too many errors. The puzzle resets..."}
+              The mechanism has locked up due to too many errors. The puzzle resets...
             </p>
           </div>
         </div>

@@ -46,6 +46,18 @@ export default function IntroHome() {
   const [hasInteracted, setHasInteracted] = useState(false);
   
   const [shakingDoor, setShakingDoor] = useState<number | null>(null);
+  const [isGameOver, setIsGameOver] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('gameover') === 'time') {
+        setIsGameOver(true);
+        // Remove param from URL
+        window.history.replaceState({}, '', '/lobby');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -184,19 +196,19 @@ export default function IntroHome() {
               <div className="h-px w-16 md:w-32 bg-gradient-to-l from-transparent to-[#d4af37]" />
             </div>
 
-            <p className="font-cinzel text-[#d4af37] text-base md:text-xl tracking-[0.5em] mb-5 opacity-80 uppercase animate-pulse">
+            <p className="font-cinzel text-[#d4af37] text-sm md:text-lg tracking-[0.5em] mb-4 opacity-80 uppercase animate-pulse">
               Seek The Hidden Truth
             </p>
 
-            <h1 className="font-cinzel text-6xl md:text-[9rem] text-[#e5d8b3] cinematic-title drop-shadow-[0_0_60px_rgba(0,0,0,1)] uppercase font-bold tracking-tighter leading-none mb-3">
+            <h1 className="font-cinzel text-5xl md:text-[7rem] text-[#e5d8b3] cinematic-title drop-shadow-[0_0_60px_rgba(0,0,0,1)] uppercase font-bold tracking-tighter leading-none mb-2">
               Escape
             </h1>
-            <h1 className="font-cinzel text-6xl md:text-[9rem] text-[#d4af37] cinematic-title drop-shadow-[0_0_40px_rgba(212,175,55,0.6)] uppercase font-bold tracking-tighter leading-none mb-10">
+            <h1 className="font-cinzel text-5xl md:text-[7rem] text-[#d4af37] cinematic-title drop-shadow-[0_0_40px_rgba(212,175,55,0.6)] uppercase font-bold tracking-tighter leading-none mb-8">
               Room
             </h1>
 
             {/* Decorative middle line */}
-            <div className="flex items-center gap-3 mb-10 opacity-50">
+            <div className="flex items-center gap-3 mb-8 opacity-50">
               <div className="h-px w-10 md:w-20 bg-[#d4af37]" />
               <div className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />
               <div className="h-px w-10 md:w-20 bg-[#d4af37]" />
@@ -204,12 +216,12 @@ export default function IntroHome() {
             
             <button 
               onClick={() => setIsExploring(true)}
-              className="group relative px-16 py-6 overflow-hidden rounded-full border-2 border-[#d4af37]/50 bg-black/50 backdrop-blur-xl transition-all duration-500 hover:border-[#d4af37] hover:shadow-[0_0_60px_rgba(212,175,55,0.4),0_0_120px_rgba(212,175,55,0.1)] active:scale-95"
+              className="group relative px-12 py-4 overflow-hidden rounded-full border-2 border-[#d4af37]/50 bg-black/50 backdrop-blur-xl transition-all duration-500 hover:border-[#d4af37] hover:shadow-[0_0_60px_rgba(212,175,55,0.4),0_0_120px_rgba(212,175,55,0.1)] active:scale-95"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-[#d4af37]/0 via-[#d4af37]/15 to-[#d4af37]/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-              <div className="relative flex items-center gap-5 text-xl md:text-2xl font-cinzel tracking-[0.3em] text-[#d4af37] group-hover:text-white transition-colors duration-300 uppercase">
+              <div className="relative flex items-center gap-4 text-lg md:text-xl font-cinzel tracking-[0.3em] text-[#d4af37] group-hover:text-white transition-colors duration-300 uppercase">
                 Enter The Gates
-                <ChevronRight size={26} className="group-hover:translate-x-2 transition-transform duration-300" />
+                <ChevronRight size={22} className="group-hover:translate-x-2 transition-transform duration-300" />
               </div>
             </button>
           </div>
@@ -255,7 +267,7 @@ export default function IntroHome() {
 
             <div className="flex flex-col items-center gap-1">
                <span className="font-cinzel text-[10px] tracking-[0.5em] text-[#8c7a6b] uppercase opacity-60">The Ancient Halls</span>
-               <h1 className="font-cinzel text-4xl md:text-7xl text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.7)] tracking-[0.1em] text-center font-bold cinematic-title">
+               <h1 className="font-cinzel text-3xl md:text-5xl text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.7)] tracking-[0.1em] text-center font-bold cinematic-title">
                   Escape Room
                </h1>
             </div>
@@ -273,7 +285,7 @@ export default function IntroHome() {
          </div>
 
          {/* Scrollable Linear Corridor Logic */}
-         <div className="w-full flex flex-col items-center gap-[150px] md:gap-[250px] mt-24 md:mt-32 pb-48">
+         <div className="w-full flex flex-col items-center gap-[100px] md:gap-[150px] mt-16 md:mt-24 pb-32">
             
             {/* Draw mapping of 5 doors strictly rendered one below another! */}
             {[1, 2, 3, 4, 5].map((level) => {
@@ -296,7 +308,7 @@ export default function IntroHome() {
                         <span className={`font-cinzel text-[10px] tracking-[0.5em] uppercase mb-2 transition-colors duration-300
                            ${isUnlocked ? 'text-[#d4af37]/60' : 'text-[#5c4026]/40'}
                         `}>Chamber {level}</span>
-                        <span className={`font-cinzel text-2xl md:text-4xl font-bold tracking-widest drop-shadow-[0_0_20px_black] text-center bg-black/70 px-8 py-4 rounded-xl border backdrop-blur-md transition-all duration-[400ms]
+                        <span className={`font-cinzel text-xl md:text-3xl font-bold tracking-widest drop-shadow-[0_0_20px_black] text-center bg-black/70 px-6 py-3 rounded-xl border backdrop-blur-md transition-all duration-[400ms]
                            ${isHoverMain ? 'text-[#e5d8b3] border-[#d4af37]/70 shadow-[0_0_40px_rgba(212,175,55,0.5)]' : isUnlocked ? 'text-[#c7baaa] border-[#5c4026]/50' : 'text-[#5c4026]/50 border-[#5c4026]/20'}
                         `}>
                            {LABELS[level - 1]}
@@ -307,7 +319,7 @@ export default function IntroHome() {
                      <div 
                         onClick={() => attemptEnterDoor(level)}
                         className={`
-                           relative w-[300px] h-[480px] md:w-[420px] md:h-[640px] rounded-t-full flex items-center justify-center transition-all duration-700
+                           relative w-[240px] h-[380px] md:w-[320px] md:h-[500px] rounded-t-full flex items-center justify-center transition-all duration-700
                            ${isHoverMain ? 'cursor-pointer shadow-[0_0_120px_rgba(212,175,55,0.7)]' : 'shadow-[0_0_80px_black]'}
                            ${!isUnlocked ? 'cursor-not-allowed filter grayscale-[30%] brightness-50 contrast-125' : ''}
                         `}
@@ -360,10 +372,10 @@ export default function IntroHome() {
          </div>
 
          {/* 4. Bottom Play Button Container (Anchored at very bottom sequence) */}
-         <div className={`w-full flex justify-center pb-32 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
+         <div className={`w-full flex justify-center pb-24 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
             <button 
                onClick={() => attemptEnterDoor(1)}
-               className="font-cinzel text-5xl md:text-7xl text-[#1a1107] font-bold tracking-[0.2em] bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] px-24 py-8 rounded-xl shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] hover:scale-105 active:scale-95 transition-all duration-300 uppercase animate-pulse border-4 border-white/50"
+               className="font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] px-16 py-6 rounded-xl shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] hover:scale-105 active:scale-95 transition-all duration-300 uppercase animate-pulse border-4 border-white/50"
             >
                Play 
             </button>
@@ -400,6 +412,27 @@ export default function IntroHome() {
 
             </div>
          </div>
+      )}
+
+      {isGameOver && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-red-950/90 backdrop-blur-md animate-in fade-in duration-500">
+          <div className="p-12 border-2 border-red-800 bg-[#0a0705] text-center rounded shadow-[0_0_150px_rgba(200,0,0,0.6)] max-w-lg flex flex-col items-center">
+            <h1 className="text-6xl font-cinzel font-bold text-red-500 mb-6 drop-shadow-[0_0_20px_red]">
+              Time's Up
+            </h1>
+            <p className="text-2xl text-red-300 mb-8 font-cormorant leading-relaxed">
+              The 30 minutes have passed. The heavy stone doors grind shut forever, sealing you in the darkness.
+              <br /><br />
+              The ancient magic resets the labyrinth...
+            </p>
+            <button 
+              onClick={() => setIsGameOver(false)}
+              className="text-xl text-[#0a0705] bg-red-800 hover:bg-red-500 transition-colors font-cinzel font-bold px-8 py-3 rounded uppercase tracking-widest"
+            >
+              Accept Fate
+            </button>
+          </div>
+        </div>
       )}
 
     </main>
