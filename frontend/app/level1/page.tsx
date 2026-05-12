@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SudokuGrid from "@/components/SudokuGrid";
 import CombinationLock from "@/components/CombinationLock";
@@ -8,6 +8,12 @@ import Timer from "@/components/Timer";
 import CollectibleItem from "@/components/CollectibleItem";
 import confetti from "canvas-confetti";
 import { useInventory } from "@/lib/InventoryContext";
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_KEY!
+)
 
 const GAME_DURATION = 30 * 60;
 
@@ -18,6 +24,12 @@ export default function Level1() {
   const hasEraser = hasItem("chalk_eraser_lvl1");
   const [gameId, setGameId] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
+  const timeLeftRef = useRef(timeLeft);
+
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
+
   const [extractedCode, setExtractedCode] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [showLevelComplete, setShowLevelComplete] = useState(false);
@@ -34,13 +46,46 @@ export default function Level1() {
   const [isGameOver, setIsGameOver] = useState(false);
   const [gameOverReason, setGameOverReason] = useState<"mistakes" | "time" | null>(null);
 
-  // Initial Load Timer
-  useEffect(() => {
-    const endTimeStr = localStorage.getItem("escapeRoomEndTime");
-    if (!endTimeStr) {
-      router.push("/");
-      return;
+  const syncGameProgress = async (remaining: number, level: number) => {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) return;
+    
+    const { error } = await supabase
+      .from('player')
+      .update({ remaining_time: remaining, current_level: level })
+      .eq('id', authData.user.id);
+      
+    if (error) {
+      console.error("Error syncing progress:", error);
     }
+  };
+
+  // Initial Load Timer & Supabase Sync
+  useEffect(() => {
+    async function initTimer() {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) {
+        router.push("/");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('player')
+        .select('remaining_time, current_level')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (error) {
+        console.error("Error fetching progress:", error);
+      } else if (data) {
+        const remaining = data.remaining_time ?? GAME_DURATION;
+        setTimeLeft(remaining);
+      } else {
+        setTimeLeft(GAME_DURATION);
+      }
+    }
+    
+    initTimer();
   }, [router]);
 
   // Custom Mouse Cursor when Item Equipped!
@@ -56,27 +101,34 @@ export default function Level1() {
     return () => { document.body.style.cursor = 'auto'; };
   }, [equippedItem, items]);
 
-  // Global Timer Loop
+  // Global Timer Loop (Local Countdown)
   useEffect(() => {
     if (isUnlocked || isGameOver || showLevelComplete) return;
 
     const interval = setInterval(() => {
-      const endTimeStr = localStorage.getItem("escapeRoomEndTime");
-      if (!endTimeStr) return;
-
-      const endTime = parseInt(endTimeStr, 10);
-      const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-
-      setTimeLeft(remaining);
-
-      if (remaining <= 0) {
-        clearInterval(interval);
-        handleTimeUp();
-      }
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          handleTimeUp();
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
   }, [isUnlocked, isGameOver, showLevelComplete, gameId]);
+
+  // Heartbeat Supabase Sync (Every 30 seconds)
+  useEffect(() => {
+    if (isUnlocked || isGameOver || showLevelComplete) return;
+
+    const syncInterval = setInterval(() => {
+       syncGameProgress(timeLeftRef.current, 1);
+    }, 30000);
+
+    return () => clearInterval(syncInterval);
+  }, [isUnlocked, isGameOver, showLevelComplete]);
 
   const handleTimeUp = () => {
     setGameOverReason("time");
@@ -117,7 +169,7 @@ export default function Level1() {
     }
   };
 
-  const handleDoorUnlocked = () => {
+  const handleDoorUnlocked = async () => {
     setIsUnlocked(true);
 
     // Mark as completed in persistent storage!
@@ -125,6 +177,9 @@ export default function Level1() {
     if (savedLevel < 1) {
       localStorage.setItem("escapeRoomCompletedLevel", "1");
     }
+
+    // FINAL SYNC (advance to level 2)
+    await syncGameProgress(timeLeftRef.current, 2);
 
     confetti({
       particleCount: 200,
@@ -152,8 +207,9 @@ export default function Level1() {
     setShowLevelComplete(false);
 
     if (gameOverReason === "time") {
-      // Reset global clock strictly!
-      localStorage.setItem("escapeRoomEndTime", (Date.now() + GAME_DURATION * 1000).toString());
+      // Reset global clock locally and in DB
+      setTimeLeft(GAME_DURATION);
+      syncGameProgress(GAME_DURATION, 1);
     }
 
     setGameId((prev) => prev + 1);
@@ -165,6 +221,11 @@ export default function Level1() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const handleSaveAndExit = async () => {
+    await syncGameProgress(timeLeftRef.current, 1);
+    router.push("/lobby");
+  };
+
   return (
     <main className="min-h-screen relative overflow-hidden bg-[#0a0705] font-cormorant flex flex-col items-center select-none">
 
@@ -173,6 +234,16 @@ export default function Level1() {
         className="fixed inset-0 z-0 opacity-40 mix-blend-screen bg-cover bg-center"
         style={{ backgroundImage: 'url(/images/library.png)' }}
       />
+
+      {/* Top Header with Save & Exit */}
+      <div className="absolute top-4 left-4 z-50">
+        <button 
+          onClick={handleSaveAndExit}
+          className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-4 py-2 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
+        >
+          Save & Exit
+        </button>
+      </div>
 
       {/* Title */}
       <div className="relative z-20 mt-5 mb-2 flex flex-col items-center w-full">
