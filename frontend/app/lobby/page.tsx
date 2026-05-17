@@ -287,14 +287,16 @@ export default function IntroHome() {
       <div className={`relative w-full z-20 flex-col items-center transition-transform duration-1000 ${isZooming ? 'corridor-zoom' : ''}`}>
          
          {/* Top Header UI */}
-         <div className={`relative w-full flex justify-between items-start pt-14 px-6 md:px-12 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
-            <div className="flex gap-4">
+         <div className={`relative w-full grid grid-cols-1 lg:grid-cols-3 gap-6 items-center pt-10 px-6 md:px-12 transition-opacity duration-1000 z-50 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
+            
+            {/* Left Column: Rules & Leaderboard */}
+            <div className="flex flex-wrap justify-center lg:justify-start gap-3 items-center order-2 lg:order-1">
               <button 
                  onClick={() => setShowRules(true)}
                  className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
               >
                  <BookOpen size={16} />
-                 <span className="hidden md:inline">How to Play</span>
+                 <span>How to Play</span>
               </button>
 
               <button 
@@ -302,12 +304,23 @@ export default function IntroHome() {
                  className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
               >
                  <Trophy size={16} className="text-[#d4af37]" />
-                 <span className="hidden md:inline">Leaderboard</span>
+                 <span>Leaderboard</span>
               </button>
+            </div>
 
+            {/* Center Column: Symmetrical Title */}
+            <div className="flex flex-col items-center gap-1 order-1 lg:order-2 select-none pointer-events-none">
+               <span className="font-cinzel text-[10px] tracking-[0.5em] text-[#8c7a6b] uppercase opacity-60">The Ancient Halls</span>
+               <h1 className="font-cinzel text-3xl md:text-5xl text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.7)] tracking-[0.1em] text-center font-bold cinematic-title">
+                  Escape Room
+               </h1>
+            </div>
+
+            {/* Right Column: Multiplayer & Audio */}
+            <div className="flex flex-wrap justify-center lg:justify-end gap-3 items-center order-3">
               <button 
                  onClick={() => setShowMultiplayer(true)}
-                 className={`z-10 flex items-center gap-2 group transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300
+                 className={`z-10 flex items-center gap-2 group transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs font-cinzel border rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300
                     ${roomCode 
                        ? 'border-[#d4af37] text-[#d4af37]' 
                        : 'border-[#5c4026]/60 text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37]'
@@ -317,26 +330,18 @@ export default function IntroHome() {
                  <Users size={16} />
                  <span>{roomCode ? `Room: ${roomCode}` : "Multiplayer"}</span>
               </button>
-            </div>
 
-            {/* Absolutely centered Title */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-14 flex flex-col items-center gap-1 pointer-events-none">
-               <span className="font-cinzel text-[10px] tracking-[0.5em] text-[#8c7a6b] uppercase opacity-60">The Ancient Halls</span>
-               <h1 className="font-cinzel text-3xl md:text-5xl text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.7)] tracking-[0.1em] text-center font-bold cinematic-title">
-                  Escape Room
-               </h1>
+              <button 
+                 onClick={toggleMusic}
+                 className={`z-10 p-3 md:p-3.5 rounded-lg border transition-all backdrop-blur-xl flex items-center justify-center
+                 ${!hasInteracted || isMuted 
+                    ? 'bg-black/80 border-[#5c4026]/60 text-[#8c7a6b] hover:text-[#d4af37] hover:border-[#d4af37]' 
+                    : 'bg-black/60 border-[#d4af37] text-[#d4af37] shadow-[0_0_20px_rgba(212,175,55,0.4)]'}
+                 `}
+              >
+                 {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} className="animate-pulse" />}
+              </button>
             </div>
-
-            <button 
-               onClick={toggleMusic}
-               className={`z-10 p-3 md:p-4 rounded-full border transition-all backdrop-blur-xl flex items-center justify-center
-               ${!hasInteracted || isMuted 
-                  ? 'bg-black/80 border-[#5c4026]/60 text-[#8c7a6b] hover:text-[#d4af37] hover:border-[#d4af37]' 
-                  : 'bg-black/60 border-[#d4af37] text-[#d4af37] shadow-[0_0_20px_rgba(212,175,55,0.4)]'}
-               `}
-            >
-               {isMuted ? <VolumeX size={22} /> : <Volume2 size={22} className="animate-pulse" />}
-            </button>
          </div>
 
          {/* Scrollable Linear Corridor Logic */}
