@@ -27,6 +27,8 @@ interface InventoryContextType {
   setEquippedItem: (id: string | null) => void;
   roomCode: string | null;
   setRoomCode: (code: string | null) => void;
+  broadcastRoomEvent: (event: string, payload: any) => void;
+  onRoomEvent: (event: string, callback: (payload: any) => void) => () => void;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -39,6 +41,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   
   // Unique client identity to prevent circular broadcast loops
   const clientIdRef = useRef<string>("");
+  const listenersRef = useRef<Record<string, Function[]>>({});
 
   useEffect(() => {
     clientIdRef.current = "client_" + Math.random().toString(36).substring(2, 11);
@@ -114,6 +117,13 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
           setItems([]);
           setEquippedItem(null);
         }
+      })
+      .on("broadcast", { event: "room_event" }, ({ payload }) => {
+        if (!payload || payload.senderId === clientIdRef.current) return;
+        
+        console.log(`[Multiplayer Room Event] Broadcast received: ${payload.event}`, payload.payload);
+        const callbacks = listenersRef.current[payload.event] || [];
+        callbacks.forEach((cb) => cb(payload.payload));
       })
       .subscribe((status) => {
         console.log(`[Multiplayer Inventory] Channel status for ${roomCode}: ${status}`);
@@ -191,6 +201,31 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const broadcastRoomEvent = (event: string, payload: any) => {
+    if (channelRef.current) {
+      console.log(`[Multiplayer Room Event] Broadcasting event: ${event}`, payload);
+      channelRef.current.send({
+        type: "broadcast",
+        event: "room_event",
+        payload: {
+          event,
+          payload,
+          senderId: clientIdRef.current
+        }
+      });
+    }
+  };
+
+  const onRoomEvent = (event: string, callback: (payload: any) => void) => {
+    if (!listenersRef.current[event]) {
+      listenersRef.current[event] = [];
+    }
+    listenersRef.current[event].push(callback);
+    return () => {
+      listenersRef.current[event] = listenersRef.current[event].filter(cb => cb !== callback);
+    };
+  };
+
   return (
     <InventoryContext.Provider
       value={{
@@ -202,7 +237,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         equippedItem,
         setEquippedItem,
         roomCode,
-        setRoomCode
+        setRoomCode,
+        broadcastRoomEvent,
+        onRoomEvent
       }}
     >
       {children}

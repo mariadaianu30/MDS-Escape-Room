@@ -19,7 +19,7 @@ const GAME_DURATION = 30 * 60;
 
 export default function Level1() {
   const router = useRouter();
-  const { hasItem, items, equippedItem, setEquippedItem, removeItem } = useInventory();
+  const { hasItem, items, equippedItem, setEquippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
   const hasCompass = hasItem("brass_compass_lvl1");
   const hasEraser = hasItem("chalk_eraser_lvl1");
   const [gameId, setGameId] = useState(0);
@@ -37,6 +37,42 @@ export default function Level1() {
 
   // Game Over states
   const [isGameOver, setIsGameOver] = useState(false);
+
+  // Real-time Multiplayer Sync for Room States
+  useEffect(() => {
+    const unsubClean = onRoomEvent("BLACKBOARD_CLEANED", () => {
+      setIsBlackboardCleaned(true);
+      showNotification("Teammate wiped the blackboard clean!");
+    });
+    const unsubUnjam = onRoomEvent("LOCK_UNJAMMED", () => {
+      setIsLockUnjammed(true);
+      showNotification("Teammate unjammed the rusted lock!");
+    });
+    const unsubUnlock = onRoomEvent("DOOR_UNLOCKED", (payload: any) => {
+      setIsUnlocked(true);
+      if (payload?.code) {
+        setExtractedCode(payload.code);
+      }
+      showNotification("Teammate unlocked the heavy door! Escaping...");
+      
+      confetti({
+        particleCount: 200,
+        spread: 160,
+        origin: { y: 0.6 },
+        colors: ['#d4af37', '#8c7a6b', '#ffffff', '#e5d8b3']
+      });
+
+      setTimeout(() => {
+        setShowLevelComplete(true);
+      }, 3000);
+    });
+
+    return () => {
+      unsubClean();
+      unsubUnjam();
+      unsubUnlock();
+    };
+  }, [onRoomEvent]);
 
   // Custom Mouse Cursor when Item Equipped!
   useEffect(() => {
@@ -58,6 +94,7 @@ export default function Level1() {
       showNotification("You wiped the blackboard clean.");
       removeItem("chalk_eraser_lvl1");
       setEquippedItem(null);
+      broadcastRoomEvent("BLACKBOARD_CLEANED", {});
     } else {
       showNotification("The blackboard is covered in thick dust. You need to use something to wipe it clean.");
     }
@@ -70,6 +107,7 @@ export default function Level1() {
       showNotification("You used the sturdy brass compass to force the rusted gears open!");
       removeItem("brass_compass_lvl1");
       setEquippedItem(null);
+      broadcastRoomEvent("LOCK_UNJAMMED", {});
     } else {
       showNotification("The mechanism is jammed and rusted. You need a sturdy tool to force it open.");
     }
@@ -93,7 +131,7 @@ export default function Level1() {
       localStorage.setItem("escapeRoomCompletedLevel", "1");
     }
 
-    // FINAL SYNC handled by next level load or manually if needed
+    broadcastRoomEvent("DOOR_UNLOCKED", { code: extractedCode || "7391" });
 
 
     confetti({
