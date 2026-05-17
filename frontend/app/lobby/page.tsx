@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight } from "lucide-react";
+import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2 } from "lucide-react";
 import "../particles.css";
 import { createClient } from '@supabase/supabase-js'
 import { useAudio } from "@/lib/AudioContext"
@@ -43,6 +43,38 @@ export default function IntroHome() {
   
   const [shakingDoor, setShakingDoor] = useState<number | null>(null);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+
+  const formatTime = (seconds: number) => {
+    if (!seconds && seconds !== 0) return "30:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (!showLeaderboard) return;
+    const fetchLeaderboard = async () => {
+      setLoadingLeaderboard(true);
+      try {
+        const { data, error } = await supabase
+          .from('player')
+          .select('username, current_level, remaining_time')
+          .order('current_level', { ascending: false })
+          .order('remaining_time', { ascending: false })
+          .limit(10);
+        if (error) throw error;
+        setLeaderboardData(data || []);
+      } catch (err) {
+        console.error("Failed to fetch leaderboard:", err);
+      } finally {
+        setLoadingLeaderboard(false);
+      }
+    };
+    fetchLeaderboard();
+  }, [showLeaderboard]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -251,13 +283,23 @@ export default function IntroHome() {
          
          {/* Top Header UI */}
          <div className={`relative w-full flex justify-between items-start pt-14 px-6 md:px-12 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
-            <button 
-               onClick={() => setShowRules(true)}
-               className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
-            >
-               <BookOpen size={16} />
-               <span className="hidden md:inline">How to Play</span>
-            </button>
+            <div className="flex gap-4">
+              <button 
+                 onClick={() => setShowRules(true)}
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
+              >
+                 <BookOpen size={16} />
+                 <span className="hidden md:inline">How to Play</span>
+              </button>
+
+              <button 
+                 onClick={() => setShowLeaderboard(true)}
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
+              >
+                 <Trophy size={16} className="text-[#d4af37]" />
+                 <span className="hidden md:inline">Leaderboard</span>
+              </button>
+            </div>
 
             {/* Absolutely centered Title */}
             <div className="absolute left-1/2 -translate-x-1/2 top-14 flex flex-col items-center gap-1 pointer-events-none">
@@ -419,6 +461,82 @@ export default function IntroHome() {
          </div>
       )}
 
+      {/* Leaderboard Modal overlay */}
+      {showLeaderboard && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
+            <div className="relative max-w-3xl w-full mx-auto bg-[#150e09] border-[3px] border-[#d4af37] p-10 md:p-14 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')]">
+               
+               <button 
+                  onClick={() => setShowLeaderboard(false)}
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+               >
+                  X
+               </button>
+
+               <div className="flex flex-col items-center mb-8 gap-1">
+                  <Trophy size={40} className="text-[#d4af37] animate-pulse drop-shadow-[0_0_10px_rgba(212,175,55,0.8)]" />
+                  <h2 className="font-cinzel text-4xl md:text-5xl text-[#d4af37] text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold uppercase">Hall of Fame</h2>
+                  <span className="font-cinzel text-xs tracking-[0.3em] text-[#8c7a6b] uppercase opacity-75">Top Explorers</span>
+               </div>
+
+               {loadingLeaderboard ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4">
+                     <Loader2 size={40} className="text-[#d4af37] animate-spin" />
+                     <p className="font-cinzel text-sm text-[#8c7a6b] tracking-wider animate-pulse">Decrypting scrolls...</p>
+                  </div>
+               ) : leaderboardData.length === 0 ? (
+                  <div className="text-center py-16">
+                     <p className="italic text-[#e5d8b3] font-cormorant text-2xl">"No explorer has yet escaped the ancient depths..."</p>
+                  </div>
+               ) : (
+                  <div className="overflow-x-auto w-full max-h-[50vh] scrollbar-thin scrollbar-thumb-[#5c4026] pr-2">
+                     <table className="w-full text-left font-cormorant border-collapse">
+                        <thead>
+                           <tr className="border-b border-[#5c4026] font-cinzel text-xs tracking-wider text-[#8c7a6b]">
+                              <th className="py-3 px-2 text-center w-16">Rank</th>
+                              <th className="py-3 px-4">Explorer</th>
+                              <th className="py-3 px-4 text-center">Highest Chamber</th>
+                              <th className="py-3 px-4 text-center">Remaining Time</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {leaderboardData.map((player, index) => {
+                              const isTop1 = index === 0;
+                              const isTop2 = index === 1;
+                              const isTop3 = index === 2;
+                              const highestChamber = player.current_level || 1;
+                              
+                              let rankColor = "text-[#c7baaa]";
+                              if (isTop1) rankColor = "text-[#d4af37] font-bold drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]";
+                              else if (isTop2) rankColor = "text-[#a0a0a0] font-bold";
+                              else if (isTop3) rankColor = "text-[#b08d57] font-bold";
+
+                              return (
+                                 <tr key={index} className="border-b border-[#5c4026]/40 hover:bg-white/5 transition-colors text-lg md:text-xl text-[#e5d8b3]">
+                                    <td className={`py-4 px-2 text-center font-cinzel font-bold ${rankColor}`}>
+                                       {isTop1 ? "I" : isTop2 ? "II" : isTop3 ? "III" : index + 1}
+                                    </td>
+                                    <td className={`py-4 px-4 font-bold flex items-center gap-2 ${isTop1 ? "text-[#ffedb3]" : ""}`}>
+                                       {player.username || "Unknown"}
+                                       {isTop1 && <Trophy size={16} className="text-[#d4af37]" />}
+                                    </td>
+                                    <td className="py-4 px-4 text-center">
+                                       Chamber {highestChamber}
+                                    </td>
+                                    <td className="py-4 px-4 text-center font-mono text-sm tracking-wider text-red-300">
+                                       {formatTime(player.remaining_time)}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                  </div>
+               )}
+            </div>
+         </div>
+      )}
+
       {isGameOver && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-red-950/90 backdrop-blur-md animate-in fade-in duration-500">
           <div className="p-12 border-2 border-red-800 bg-[#0a0705] text-center rounded shadow-[0_0_150px_rgba(200,0,0,0.6)] max-w-lg flex flex-col items-center">
@@ -455,5 +573,6 @@ export default function IntroHome() {
     </main>
   );
 }
+
 
 
