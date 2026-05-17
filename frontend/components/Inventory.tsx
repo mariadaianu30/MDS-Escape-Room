@@ -14,7 +14,7 @@ export default function Inventory() {
   const activeItem = items.find((i) => i.id === selectedItem);
 
   // Hide inventory button on the home/corridor page
-  if (pathname === '/') return null;
+  if (pathname === '/' || pathname === '/lobby') return null;
 
   return (
     <>

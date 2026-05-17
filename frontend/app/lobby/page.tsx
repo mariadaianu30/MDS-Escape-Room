@@ -60,6 +60,31 @@ export default function IntroHome() {
   }, []);
 
   useEffect(() => {
+    // Check Supabase session and ensure player profile exists (for Google OAuth users)
+    const ensurePlayerProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Check if user exists in player table
+        const { data: player } = await supabase
+          .from('player')
+          .select('id')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (!player) {
+          // If not, they probably logged in via Google for the first time. Create profile.
+          await supabase.from('player').insert([{
+            id: session.user.id,
+            username: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
+            current_level: 1,
+            best_score: 0,
+            remaining_time: 1800
+          }]);
+        }
+      }
+    };
+    ensurePlayerProfile();
+
     const style = document.createElement('style');
     style.innerHTML = `
       @keyframes flicker {
@@ -104,7 +129,8 @@ export default function IntroHome() {
        setCompletedLevel(parseInt(comp, 10));
     }
     
-    audioRef.current = new Audio("https://actions.google.com/sounds/v1/ambiences/huge_water_cave.ogg");
+    // Updated to point to a local file. The user will need to put an MP3 file at public/audio/ambient.mp3
+    audioRef.current = new Audio("/audio/ambient.mp3");
     audioRef.current.loop = true;
     audioRef.current.volume = 0.5;
 
@@ -127,8 +153,11 @@ export default function IntroHome() {
   const toggleMusic = (e: React.MouseEvent) => {
      e.stopPropagation();
      if (!audioRef.current) return;
+     
+     if (!hasInteracted) setHasInteracted(true);
+
      if (isMuted) {
-        audioRef.current.play();
+        audioRef.current.play().catch(err => console.log("Audio play blocked by browser:", err));
         setIsMuted(false);
      } else {
         audioRef.current.pause();
@@ -163,7 +192,7 @@ export default function IntroHome() {
   return (
     <main 
       onClick={handleGlobalInteraction}
-      className={`min-h-screen relative bg-black font-cormorant flex flex-col items-center select-none text-[#e5d8b3] transition-opacity duration-1000 overflow-hidden ${isZooming ? "pointer-events-none" : ""}`}
+      className={`relative bg-black font-cormorant flex flex-col items-center select-none text-[#e5d8b3] transition-opacity duration-1000 ${isZooming ? "pointer-events-none" : ""} ${!isExploring ? "h-[100dvh] w-full overflow-hidden" : "min-h-screen overflow-x-hidden"}`}
     >
 
       {/* ========== HERO LANDING SCREEN ========== */}
@@ -256,16 +285,17 @@ export default function IntroHome() {
       <div className={`relative w-full z-20 flex-col items-center transition-transform duration-1000 ${isZooming ? 'corridor-zoom' : ''}`}>
          
          {/* Top Header UI */}
-         <div className={`w-full flex justify-between items-start pt-14 px-6 md:px-12 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
+         <div className={`relative w-full flex justify-between items-start pt-14 px-6 md:px-12 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
             <button 
                onClick={() => setShowRules(true)}
-               className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
+               className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
             >
                <BookOpen size={16} />
                <span className="hidden md:inline">How to Play</span>
             </button>
 
-            <div className="flex flex-col items-center gap-1">
+            {/* Absolutely centered Title */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-14 flex flex-col items-center gap-1 pointer-events-none">
                <span className="font-cinzel text-[10px] tracking-[0.5em] text-[#8c7a6b] uppercase opacity-60">The Ancient Halls</span>
                <h1 className="font-cinzel text-3xl md:text-5xl text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.7)] tracking-[0.1em] text-center font-bold cinematic-title">
                   Escape Room
@@ -274,7 +304,7 @@ export default function IntroHome() {
 
             <button 
                onClick={toggleMusic}
-               className={`p-3 md:p-4 rounded-full border transition-all backdrop-blur-xl flex items-center justify-center
+               className={`z-10 p-3 md:p-4 rounded-full border transition-all backdrop-blur-xl flex items-center justify-center
                ${!hasInteracted || isMuted 
                   ? 'bg-black/80 border-[#5c4026]/60 text-[#8c7a6b] hover:text-[#d4af37] hover:border-[#d4af37]' 
                   : 'bg-black/60 border-[#d4af37] text-[#d4af37] shadow-[0_0_20px_rgba(212,175,55,0.4)]'}
@@ -350,18 +380,28 @@ export default function IntroHome() {
                         <div className={`relative z-10 p-6 rounded-full border-2 shadow-[0_0_50px_black] bg-black/90 transition-colors duration-500
                            ${isUnlocked ? 'border-[#5c4026] group-hover:bg-[#2a1d0f]' : 'border-red-900'}
                         `}>
-                           {!isUnlocked ? (
-                              <div className="relative group/lock">
-                                 <Lock className="w-12 h-12 md:w-16 md:h-16 text-red-600/80" strokeWidth={2} />
+                           <div className="relative group/lock">
+                              {/* Number ALWAYS visible */}
+                              <div className={`text-4xl md:text-5xl font-cinzel text-center w-12 h-12 md:w-16 md:h-16 font-bold flex items-center justify-center
+                                 ${isUnlocked ? 'text-[#e5d8b3] drop-shadow-[0_0_10px_white]' : 'text-red-700/80 drop-shadow-[0_0_15px_rgba(200,0,0,0.6)]'}
+                              `}>
+                                 {level}
+                              </div>
+
+                              {/* Tiny lock icon if not unlocked */}
+                              {!isUnlocked && (
+                                 <div className="absolute -bottom-2 -right-2 bg-black p-1.5 rounded-full border border-red-900 shadow-[0_0_10px_black]">
+                                    <Lock size={16} className="text-red-600" strokeWidth={2.5} />
+                                 </div>
+                              )}
+                              
+                              {/* Hover tooltip for locked doors */}
+                              {!isUnlocked && (
                                  <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[220px] bg-[#1a1107] border border-red-900 text-red-400 text-sm px-4 py-2 rounded opacity-0 group-hover/lock:opacity-100 transition-opacity font-cormorant text-center pointer-events-none">
                                     Complete the previous level to unlock
                                  </div>
-                              </div>
-                           ) : (
-                              <div className="text-4xl md:text-5xl font-cinzel text-[#e5d8b3] text-center w-12 h-12 md:w-16 md:h-16 font-bold flex items-center justify-center drop-shadow-[0_0_10px_white]">
-                                 {level}
-                              </div>
-                           )}
+                              )}
+                           </div>
                         </div>
                         )}
                      </div>
@@ -369,6 +409,21 @@ export default function IntroHome() {
                   </div>
                );
             })}
+         </div>
+
+         {/* DEBUG / RESET PROGRESS BUTTON */}
+         <div className="pb-16 flex justify-center w-full z-20">
+            <button
+               onClick={() => {
+                  localStorage.removeItem("escapeRoomCompletedLevel");
+                  setCompletedLevel(0);
+                  // Refresh the page
+                  window.location.reload();
+               }}
+               className="text-[#8c7a6b] hover:text-red-500 text-xs font-cinzel tracking-widest border border-[#5c4026] hover:border-red-500 rounded px-4 py-2 transition-all bg-black/50"
+            >
+               RESET PROGRESS
+            </button>
          </div>
 
          {/* 4. Bottom Play Button Container (Anchored at very bottom sequence) */}
