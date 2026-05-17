@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2 } from "lucide-react";
+import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2, Users, LogOut } from "lucide-react";
 import "../particles.css";
 import { createClient } from '@supabase/supabase-js'
 import { useAudio } from "@/lib/AudioContext"
+import { useInventory } from "@/lib/InventoryContext"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,6 +36,10 @@ const LABELS = [
 
 export default function IntroHome() {
   const router = useRouter();
+  const { roomCode, setRoomCode } = useInventory();
+  const [showMultiplayer, setShowMultiplayer] = useState(false);
+  const [inputRoomCode, setInputRoomCode] = useState("");
+  
   const [completedLevel, setCompletedLevel] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -286,7 +291,7 @@ export default function IntroHome() {
             <div className="flex gap-4">
               <button 
                  onClick={() => setShowRules(true)}
-                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
               >
                  <BookOpen size={16} />
                  <span className="hidden md:inline">How to Play</span>
@@ -294,10 +299,23 @@ export default function IntroHome() {
 
               <button 
                  onClick={() => setShowLeaderboard(true)}
-                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
               >
                  <Trophy size={16} className="text-[#d4af37]" />
                  <span className="hidden md:inline">Leaderboard</span>
+              </button>
+
+              <button 
+                 onClick={() => setShowMultiplayer(true)}
+                 className={`z-10 flex items-center gap-2 group transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300
+                    ${roomCode 
+                       ? 'border-[#d4af37] text-[#d4af37]' 
+                       : 'border-[#5c4026]/60 text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37]'
+                    }
+                 `}
+              >
+                 <Users size={16} />
+                 <span>{roomCode ? `Room: ${roomCode}` : "Multiplayer"}</span>
               </button>
             </div>
 
@@ -533,6 +551,97 @@ export default function IntroHome() {
                      </table>
                   </div>
                )}
+            </div>
+         </div>
+      )}
+
+      {/* 6. Multiplayer Modal overlay */}
+      {showMultiplayer && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
+            <div className="relative max-w-xl w-full mx-auto bg-[#150e09] border-[3px] border-[#d4af37] p-10 md:p-14 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] font-cinzel">
+               
+               <button 
+                  onClick={() => setShowMultiplayer(false)}
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+               >
+                  X
+               </button>
+
+               <div className="flex flex-col items-center mb-8 gap-2">
+                  <Users size={40} className="text-[#d4af37] drop-shadow-[0_0_10px_rgba(212,175,55,0.8)] animate-pulse" />
+                  <h2 className="font-cinzel text-4xl text-[#d4af37] text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold uppercase">Multiplayer</h2>
+                  <span className="font-cinzel text-xs tracking-[0.3em] text-[#8c7a6b] uppercase opacity-75">Shared Session Room</span>
+               </div>
+
+               <div className="flex flex-col gap-6 text-[#e5d8b3] text-center">
+                  {roomCode ? (
+                     <div className="space-y-6">
+                        <div className="p-6 bg-[#2a1d0f] border-2 border-[#5c4026] rounded-xl">
+                           <p className="text-[#8c7a6b] text-sm uppercase tracking-widest mb-2">Connected to Chamber</p>
+                           <h3 className="text-4xl text-[#d4af37] font-bold tracking-[0.2em]">{roomCode}</h3>
+                        </div>
+                        <p className="text-lg font-cormorant italic text-[#a89f91] px-4 leading-relaxed">
+                           "Your inventory and progression are now bound to all players inside this specific chamber. Items gathered will instantly synchronise."
+                        </p>
+                        <button
+                           onClick={() => {
+                              setRoomCode(null);
+                           }}
+                           className="w-full py-4 px-6 border-2 border-red-900 text-red-400 hover:bg-red-950/40 hover:border-red-600 rounded-lg tracking-widest font-bold transition-all uppercase flex items-center justify-center gap-2 duration-300"
+                        >
+                           <LogOut size={18} />
+                           Leave Session Room
+                        </button>
+                     </div>
+                  ) : (
+                     <div className="space-y-8">
+                        <div className="space-y-4">
+                           <h3 className="text-xl text-[#c7baaa] uppercase tracking-wider">Host a Private Session</h3>
+                           <button
+                              onClick={() => {
+                                 // Generate random 6-character room code
+                                 const generatedCode = "ESC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                                 setRoomCode(generatedCode);
+                              }}
+                              className="w-full py-4 px-6 bg-gradient-to-r from-[#d4af37] to-[#b08d57] text-black hover:brightness-110 rounded-lg tracking-widest font-bold transition-all uppercase shadow-[0_0_35px_rgba(212,175,55,0.3)] duration-300"
+                           >
+                              Generate Room Code
+                           </button>
+                        </div>
+
+                        <div className="relative flex py-4 items-center">
+                           <div className="flex-grow border-t border-[#5c4026]/60"></div>
+                           <span className="flex-shrink mx-4 text-[#8c7a6b] text-sm uppercase tracking-widest">or</span>
+                           <div className="flex-grow border-t border-[#5c4026]/60"></div>
+                        </div>
+
+                        <div className="space-y-4">
+                           <h3 className="text-xl text-[#c7baaa] uppercase tracking-wider">Join Existing Session</h3>
+                           <div className="flex gap-3">
+                              <input
+                                 type="text"
+                                 value={inputRoomCode}
+                                 onChange={(e) => setInputRoomCode(e.target.value.toUpperCase())}
+                                 placeholder="ENTER ROOM CODE"
+                                 className="flex-1 py-4 px-6 bg-black/80 border-2 border-[#5c4026] text-[#e5d8b3] rounded-lg tracking-widest text-center focus:border-[#d4af37] focus:outline-none transition-all placeholder:text-[#5c4026]"
+                              />
+                              <button
+                                 onClick={() => {
+                                    if (inputRoomCode.trim()) {
+                                       setRoomCode(inputRoomCode.trim());
+                                       setInputRoomCode("");
+                                    }
+                                 }}
+                                 className="py-4 px-8 bg-transparent border-2 border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black rounded-lg tracking-widest font-bold transition-all uppercase duration-300"
+                              >
+                                 Join
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+                  )}
+               </div>
+
             </div>
          </div>
       )}
