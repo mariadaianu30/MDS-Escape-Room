@@ -21,6 +21,13 @@ stories from `docs/backlog.pdf`.
 | US14 | Partial | Python and Next.js narrator agents exist; UI integration remains incomplete. |
 | US15 | Partial | Python unit tests exist and pass; frontend/e2e coverage and formal 80% coverage reporting are not complete yet. |
 | US16 | Done | GitHub Actions CI runs Python tests and frontend build. |
+| US17 | Planned | Private multiplayer sessions, hosted and joined via unique 6-digit room codes. |
+| US18 | Planned | Real-time state synchronization for room exploration, puzzle progress, and item interactions. |
+| US19 | Planned | Global shared inventory syncing collected items and equipping/consuming logic for the team. |
+| US20 | Planned | Dynamic role assignment (Scribe, Artisan, Oracle) to drive communication-based puzzle solving. |
+| US21 | Planned | Shared AI chat rendering Narrator/Hint updates and enforcement of team hint cooldowns. |
+| US22 | Planned | Team win condition requiring all sequential gates to be cleared to trigger joint victory screen. |
+| US23 | Planned | Global synchronized team leaderboard with real-time score updates and filters. |
 
 ## Completed Since Backlog Review
 

@@ -45,6 +45,39 @@ This document outlines the balanced task allocation for the **MDS Escape Room** 
 
 ---
 
+## 🚀 Sprint 4: Multiplayer Extension (Team Collaboration)
+
+To extend the escape room into a fully collaborative multiplayer experience, the core game systems are extended in Sprint 4 with balanced full-stack responsibility across the exact same ownership boundaries:
+
+### 1. Ionel Otilia (Host/Join Staging & Unified Win Condition)
+*   **Level/Core System Focus:** Room Session Orchestrator
+*   **Sprint 4 Stories:**
+    *   **US17 (Room Code & Sessions):** Implementation of multiplayer host/join corridor logic and staging lobby.
+    *   **US22 (Global Team Win Condition):** Synchronization of victory triggers across all players and rendering of individual player contributions on the final team win screen.
+
+### 2. Chirițoiu Andra Florentina (Shared Team Inventory & Sync)
+*   **Level/Core System Focus:** Shared Inventory Engine
+*   **Sprint 4 Stories:**
+    *   **US19 (Shared Team Inventory):** Creation of a unified team inventory state context using WebSockets to synchronize collections, inspect events, and item consumption.
+
+### 3. Vlad Ioana Gabriela (Shared Team AI Chat & Cooldowns)
+*   **Level/Core System Focus:** Team Hint Synchronization
+*   **Sprint 4 Stories:**
+    *   **US21 (Shared AI Chat):** Development of the team-wide shared chat panel, coordinating progressive hints and managing global team-wide 60-second request cooldowns.
+
+### 4. Pupăză Alexandra Maria (Role Assignment & Dynamic Views)
+*   **Level/Core System Focus:** Cooperative Asymmetrical Gameplay
+*   **Sprint 4 Stories:**
+    *   **US20 (Collaborative Role Assignment):** Designing asymmetric UI layouts and role-based visibility checks (Scribe, Artisan, Oracle) to prevent solo-run behavior.
+
+### 5. Dăianu Maria Iuliana (Real-time State Synchronization & Database Leaderboard)
+*   **Level/Core System Focus:** WebSockets Concurrency & Leaderboard API
+*   **Sprint 4 Stories:**
+    *   **US18 (Real-Time Sync):** Socket connection management and optimistic state updates for locks, chests, and levers across player screens.
+    *   **US23 (Synchronized Team Leaderboard):** Design and optimization of the multi-user team ranking board with database indexing and query filters.
+
+---
+
 ## 🛠️ Process & Version Control Rules (MDS Requirements)
 
 This section ensures adherence to professional software development principles in accordance with Agile methodology and grading criteria.
