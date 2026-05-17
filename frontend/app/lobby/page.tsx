@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2, Users, LogOut } from "lucide-react";
+import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2, Users, LogOut, User } from "lucide-react";
 import "../particles.css";
 import { createClient } from '@supabase/supabase-js'
 import { useAudio } from "@/lib/AudioContext"
@@ -40,6 +40,14 @@ export default function IntroHome() {
   const [showMultiplayer, setShowMultiplayer] = useState(false);
   const [inputRoomCode, setInputRoomCode] = useState("");
   
+  const [showProfile, setShowProfile] = useState(false);
+  const [userProfile, setUserProfile] = useState<{
+    username: string;
+    email: string;
+    current_level: number;
+    remaining_time: number;
+  } | null>(null);
+
   const [completedLevel, setCompletedLevel] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -167,6 +175,34 @@ export default function IntroHome() {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: player } = await supabase
+          .from('player')
+          .select('username, current_level, remaining_time')
+          .eq('id', session.user.id)
+          .single();
+        
+        setUserProfile({
+          username: player?.username || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
+          email: session.user.email || '',
+          current_level: player?.current_level || 1,
+          remaining_time: player?.remaining_time || 1800
+        });
+      } else {
+        setUserProfile({
+          username: 'Anonymous Explorer',
+          email: 'anonymous@catacombs.io',
+          current_level: completedLevel + 1,
+          remaining_time: 1800
+        });
+      }
+    };
+    fetchSession();
+  }, [completedLevel]);
+
   const attemptEnterDoor = (level: number) => {
     const isUnlocked = level === 1 || completedLevel >= level - 1;
     if (!isUnlocked) {
@@ -284,7 +320,7 @@ export default function IntroHome() {
       <div className="fixed bottom-0 left-0 right-0 h-[30vh] z-10 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none mix-blend-multiply" />
       <div className="fixed bottom-[-50px] left-[-10vw] right-[-10vw] h-[40vh] z-[12] bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mist-move pointer-events-none opacity-40 mix-blend-screen" />
 
-      <div className={`relative w-full z-20 flex-col items-center transition-transform duration-1000 ${isZooming ? 'corridor-zoom' : ''}`}>
+      <div className={`relative w-full z-20 flex flex-col items-center transition-all duration-1000 ${isZooming ? 'corridor-zoom' : ''} ${!isExploring ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
          
          {/* Top Header UI */}
          <div className={`relative w-full grid grid-cols-1 lg:grid-cols-3 gap-6 items-center pt-10 px-6 md:px-12 transition-opacity duration-1000 z-50 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
@@ -318,6 +354,13 @@ export default function IntroHome() {
 
             {/* Right Column: Multiplayer & Audio */}
             <div className="flex flex-wrap justify-center lg:justify-end gap-3 items-center order-3">
+              <button 
+                 onClick={() => setShowProfile(true)}
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
+              >
+                 <User size={16} />
+                 <span>My Account</span>
+              </button>
               <button 
                  onClick={() => setShowMultiplayer(true)}
                  className={`z-10 flex items-center gap-2 group transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs font-cinzel border rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300
@@ -645,6 +688,97 @@ export default function IntroHome() {
                         </div>
                      </div>
                   )}
+               </div>
+
+            </div>
+         </div>
+      )}
+
+      {/* 7. Explorer Profile Modal (My Account) */}
+      {showProfile && userProfile && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
+            <div className="relative max-w-2xl w-full mx-auto bg-[#130d0a] border-[3px] border-[#d4af37] p-8 md:p-12 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.35)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] font-cinzel overflow-y-auto max-h-[90vh]">
+               
+               <button 
+                  onClick={() => setShowProfile(false)}
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+               >
+                  X
+               </button>
+
+               <div className="flex flex-col items-center mb-8 gap-2 border-b border-[#5c4026]/40 pb-6">
+                  <div className="w-20 h-20 rounded-full border-2 border-[#d4af37] bg-black flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.4)] mb-2">
+                     <User size={38} className="text-[#d4af37] drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]" />
+                  </div>
+                  <h2 className="font-cinzel text-3xl text-[#d4af37] text-center tracking-widest font-bold uppercase">{userProfile.username}</h2>
+                  <span className="font-cinzel text-xs tracking-[0.3em] text-[#8c7a6b] uppercase opacity-75">{userProfile.email}</span>
+                  <span className="mt-2 px-4 py-1 border border-[#d4af37]/40 bg-[#23170e]/80 text-[#d4af37] rounded-full text-xs tracking-wider uppercase font-bold">
+                     {completedLevel >= 5 ? "👑 Grandmaster Explorer" : "📜 Veteran Explorer"}
+                  </span>
+               </div>
+
+               <div className="space-y-8 text-[#e5d8b3]">
+                  {/* Progress Block */}
+                  <div className="space-y-4">
+                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Adventure Journal</h3>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Chambers Conquered</p>
+                           <p className="text-2xl font-bold">{completedLevel} / 5 Floors</p>
+                        </div>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Current Standing</p>
+                           <p className="text-2xl font-bold text-[#d4af37]">Chamber {completedLevel + 1}</p>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Team Chronicles & Sprints */}
+                  <div className="space-y-4">
+                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Co-Op Campaign Records</h3>
+                     <div className="space-y-3">
+                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                           <div>
+                              <p className="text-lg font-bold text-[#ffedb3]">Chamber I: The Library</p>
+                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Ionel, Vlad, Pupăză, Dăianu</p>
+                           </div>
+                           <div className="text-right">
+                              <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
+                                 14m 20s · ESCAPED
+                              </span>
+                           </div>
+                        </div>
+
+                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                           <div>
+                              <p className="text-lg font-bold text-[#ffedb3]">Chamber II: The Alchemist's Lab</p>
+                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Ionel, Dăianu</p>
+                           </div>
+                           <div className="text-right">
+                              <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
+                                 21m 45s · ESCAPED
+                              </span>
+                           </div>
+                        </div>
+
+                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-60 hover:opacity-100 transition-opacity">
+                           <div>
+                              <p className="text-lg font-bold text-[#ffedb3]">Chamber III: The Tower</p>
+                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Co-Op Squad</p>
+                           </div>
+                           <div className="text-right">
+                              <span className="px-3 py-1 bg-red-950/40 border border-red-900 text-red-400 rounded text-xs font-mono font-bold tracking-widest">
+                                 FAILED · TIME EXPIRED
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Footnote */}
+                  <p className="text-center font-cormorant italic text-sm text-[#8c7a6b] pt-4">
+                     "The ancient records are bound in stone, detailing the path you and your compatriots have walked."
+                  </p>
                </div>
 
             </div>
