@@ -164,7 +164,7 @@ export default function Level2() {
   }, []);
 
   // --- STAGE TRANSITION HELPER ---
-  const advanceTo = (newStage: GameStage) => {
+  const advanceTo = (newStage: GameStage | 'hidden_objects') => {
     setFadeState('out');
     setTimeout(() => {
       setStage(newStage);
@@ -456,21 +456,21 @@ export default function Level2() {
                 <div className="mb-4">
                   ☉ First Gate — Solar Calcination:<br/>
                   When Sol stands at his zenith, the number of his sacred metal is LXXIX. From this, subtract the atomic weight of common salt's metal (XI), then add the legs of a spider (VIII). The result names the flame's intensity. One must 
-                  <Blank id="b1" val={filled.b1} onDrop={handleDrop} onRem={(e)=>placeWord('b1',null as any)} /> 
+                  <Blank id="b1" val={filled.b1} onDrop={handleDrop} onRem={() => placeWord('b1',null as any)} /> 
                   the base matter at precisely this degree until only the white ash remains — no more, no less, lest the Sun's gift turns to poison.
                 </div>
 
                 <div className="mb-4">
                   ☽ Second Gate — Lunar Conjunction:<br/>
                   The Moon rules silver, whose number is XLVII. Divide this by the sacred proportion of the trinity (III), round to the nearest whole. This is the number of nights one must 
-                  <Blank id="b2" val={filled.b2} onDrop={handleDrop} onRem={(e)=>placeWord('b2',null as any)} /> 
+                  <Blank id="b2" val={filled.b2} onDrop={handleDrop} onRem={() => placeWord('b2',null as any)} /> 
                   fire and water — Sol and Luna — under open sky, neither vessel covered, neither flame extinguished.
                 </div>
 
                 <div className="mb-4">
                   ♄ Third Gate — Saturnine Rest:<br/>
                   Saturn's lead bears the number LXXXII. Halve it, then subtract the fingers of one hand (V). The residue must 
-                  <Blank id="b3" val={filled.b3} onDrop={handleDrop} onRem={(e)=>placeWord('b3',null as any)} /> 
+                  <Blank id="b3" val={filled.b3} onDrop={handleDrop} onRem={() => placeWord('b3',null as any)} /> 
                   in sealed obsidian for precisely this count of moons, untouched by light, unmoved by hand — Saturn demands patience as the Moon demands silence.
                 </div>
               </div>
