@@ -31,6 +31,16 @@ export default function AIHintDialog() {
   if (!pathname || !pathname.startsWith('/level')) return null;
 
   const currentLevel = parseInt(pathname.match(/level(\d+)/)?.[1] || "1", 10);
+  const currentPuzzleId = `level${currentLevel}_general`;
+
+  const getPlayerId = () => {
+    const existing = localStorage.getItem("escapeRoomPlayerId");
+    if (existing) return existing;
+
+    const created = crypto.randomUUID();
+    localStorage.setItem("escapeRoomPlayerId", created);
+    return created;
+  };
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +55,12 @@ export default function AIHintDialog() {
       const res = await fetch("/api/hint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ level: currentLevel, userQuestion: userMsg }),
+        body: JSON.stringify({
+          level: currentLevel,
+          puzzleId: currentPuzzleId,
+          playerId: getPlayerId(),
+          userQuestion: userMsg,
+        }),
       });
 
       if (!res.ok) throw new Error("Failed to contact the spirit");
