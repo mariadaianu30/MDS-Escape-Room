@@ -208,15 +208,16 @@ function ConstellationBoard({
 
   return (
     <div
-      className={`relative w-full aspect-square rounded-xl border-2 overflow-hidden transition-all duration-500
+      className={`relative w-full aspect-square rounded-lg border overflow-hidden transition-all duration-500
         ${active ? (wrongFlash ? "border-red-500 shadow-[0_0_30px_rgba(255,50,50,0.5)]" :
-            allSolved ? "border-[#d4af37] shadow-[0_0_50px_rgba(212,175,55,0.6)]" :
-            "border-[#2b5070] shadow-[0_0_20px_rgba(43,80,112,0.4)]")
-          : "border-[#1a2a3a]/60 opacity-50 grayscale"}
+            allSolved ? "border-[#d4af37] shadow-[0_0_50px_rgba(212,175,55,0.45)]" :
+            "border-[#5f8fc4]/70 shadow-[0_0_24px_rgba(43,80,112,0.25)]")
+          : "border-[#24344a]/70 opacity-60 grayscale-[0.35]"}
       `}
-      style={{ background: "radial-gradient(ellipse at center, #07122a 0%, #020510 100%)" }}
+      style={{ background: "radial-gradient(ellipse at center, #091833 0%, #020611 78%)" }}
     >
-      <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
+      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
+      <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-[#6b9fd4]/10 to-transparent pointer-events-none" />
 
       {/* SVG lines */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
@@ -406,42 +407,38 @@ export default function Level3() {
       {/* Background */}
       <div className="fixed inset-0 z-0 bg-cover bg-center brightness-[0.55]"
         style={{ backgroundImage: "url(/images/observatory.png)" }} />
-      <div className="fixed inset-0 z-[1] bg-[#02050f]/50 pointer-events-none" />
-      <div className="fixed inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_30%,#02050f_100%)] pointer-events-none" />
-      <div className="fixed inset-0 z-[2] opacity-25 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] pointer-events-none" />
-      <div className="fixed top-0 inset-x-0 h-24 z-[3] bg-gradient-to-b from-[#02050f] to-transparent pointer-events-none" />
-      <div className="fixed bottom-0 inset-x-0 h-24 z-[3] bg-gradient-to-t from-[#02050f] to-transparent pointer-events-none" />
-      {/* Nebula colour blobs — atmospheric depth */}
-      <div className="fixed inset-0 z-[2] pointer-events-none">
-        <div className="absolute top-[20%] left-[15%] w-[40vw] h-[30vh] rounded-full bg-[#1a3a6b]/20 blur-[80px]" style={{ animation: 'nebula-pulse 8s ease-in-out infinite' }} />
-        <div className="absolute bottom-[25%] right-[10%] w-[30vw] h-[25vh] rounded-full bg-[#6b1a3a]/15 blur-[60px]" style={{ animation: 'nebula-pulse 11s 3s ease-in-out infinite' }} />
-        <div className="absolute top-[55%] left-[55%] w-[25vw] h-[20vh] rounded-full bg-[#1a6b5a]/10 blur-[70px]" style={{ animation: 'nebula-pulse 9s 1.5s ease-in-out infinite' }} />
-      </div>
+      <div className="fixed inset-0 z-[1] bg-[#02050f]/55 pointer-events-none" />
+      <div className="fixed inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_22%,rgba(2,5,15,0.76)_72%,#02050f_100%)] pointer-events-none" />
+      <div className="fixed inset-0 z-[2] opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] pointer-events-none" />
+      <div className="fixed inset-x-0 top-0 h-32 z-[3] bg-gradient-to-b from-[#02050f] via-[#02050f]/70 to-transparent pointer-events-none" />
+      <div className="fixed inset-x-0 bottom-0 h-32 z-[3] bg-gradient-to-t from-[#02050f] via-[#02050f]/70 to-transparent pointer-events-none" />
+      <div className="fixed inset-x-0 top-24 h-px z-[3] bg-gradient-to-r from-transparent via-[#6b9fd4]/25 to-transparent pointer-events-none" />
       <TwinklingStars />
       <ShootingComet />
 
       {/* Title — moved slightly lower to clear inventory overlap */}
-      <div className="relative z-20 mt-3 mb-1 flex flex-col items-center w-full">
+      <div className="relative z-20 mt-5 mb-2 flex flex-col items-center w-full">
         <div className="flex items-center gap-3 mb-1 opacity-40">
           <div className="h-px w-12 bg-gradient-to-r from-transparent to-[#6b9fd4]" />
           <span className="font-cinzel text-[9px] tracking-[0.5em] text-[#6b9fd4] uppercase">Chamber III</span>
           <div className="h-px w-12 bg-gradient-to-l from-transparent to-[#6b9fd4]" />
         </div>
-        <h1 className="font-cinzel text-xl md:text-3xl text-[#b8d4f0] text-center drop-shadow-[0_0_15px_rgba(107,159,212,0.4)] tracking-[0.2em] leading-normal">
+        <h1 className="font-cinzel text-2xl md:text-4xl text-[#d9ecff] text-center drop-shadow-[0_0_18px_rgba(107,159,212,0.45)] tracking-[0.22em] leading-normal">
           The Astronomer's Tower
         </h1>
+        <div className="mt-2 h-px w-48 bg-gradient-to-r from-transparent via-[#d4af37]/40 to-transparent" />
       </div>
 
 
 
       {/* ─── Game Layout — shifted down slightly ─── */}
-      <div className="relative z-10 w-full flex flex-col lg:flex-row items-start justify-center gap-4 px-4 md:px-10 mt-4 pb-4">
+      <div className="relative z-10 w-full max-w-[1500px] flex flex-col lg:flex-row items-start justify-center gap-5 px-4 md:px-10 mt-3 pb-8">
 
         {/* LEFT PANEL: Story, Clue, Telescope — spaced out to fill height */}
         <div className="flex flex-col gap-3 w-full lg:max-w-md shrink-0">
 
           {/* Story / Lore */}
-          <div className="bg-black/50 backdrop-blur-sm border border-[#1e3550] rounded-xl p-4 md:p-5 shadow-[inset_0_0_20px_rgba(30,53,80,0.2)]">
+          <div className="bg-[#030914]/70 backdrop-blur-sm border border-[#294766]/80 rounded-lg p-4 md:p-5 shadow-[inset_0_0_24px_rgba(30,53,80,0.2),0_12px_34px_rgba(0,0,0,0.32)]">
             <h2 className="font-cinzel text-[#6b9fd4] text-[11px] tracking-[0.4em] uppercase mb-2">The Archivist's Note</h2>
             <p className="text-[#8aa1b8] text-sm md:text-lg leading-relaxed italic">
               "The passage opens only when the Ancients' lost constellation is traced in full upon the celestial sphere.
@@ -450,7 +447,7 @@ export default function Level3() {
           </div>
 
           {/* Clue scroll */}
-          <div className="bg-[#0a0e1a]/70 border border-[#d4af37]/30 rounded-xl p-5 md:p-6 shadow-[0_0_30px_rgba(212,175,55,0.08)] bg-[url('https://www.transparenttextures.com/patterns/parchment.png')]">
+          <div className="bg-[#0a0e1a]/75 border border-[#d4af37]/35 rounded-lg p-5 md:p-6 shadow-[0_0_34px_rgba(212,175,55,0.1)] bg-[url('https://www.transparenttextures.com/patterns/parchment.png')]">
             <h2 className="font-cinzel text-[#d4af37] text-[11px] tracking-[0.4em] uppercase mb-2">Ancient Scroll</h2>
             <p className="text-lg md:text-2xl text-[#e5d8b3] italic leading-tight font-medium">
               "{CORRECT_CONSTELLATION.clue}"
@@ -460,7 +457,7 @@ export default function Level3() {
           {/* Telescope */}
           <div
             onClick={handleTelescopeClick}
-            className={`flex items-center gap-5 p-4 md:p-5 rounded-xl border-2 cursor-pointer transition-all duration-500
+            className={`flex items-center gap-5 p-4 md:p-5 rounded-lg border cursor-pointer transition-all duration-500
               ${lensInserted
                 ? "border-[#6b9fd4] bg-[#091628]/80 shadow-[0_0_25px_rgba(107,159,212,0.3)]"
                 : "border-[#1e3550]/60 bg-black/40 hover:border-[#2b5070]"}
@@ -485,7 +482,7 @@ export default function Level3() {
 
           {/* Instructions */}
           {lensInserted && (
-            <div className="bg-black/40 border border-[#1e3550]/50 rounded-xl p-4 md:p-5 animate-in fade-in duration-500">
+            <div className="bg-black/40 border border-[#1e3550]/50 rounded-lg p-4 md:p-5 animate-in fade-in duration-500">
               <h2 className="font-cinzel text-[#6b9fd4] text-[11px] tracking-[0.4em] uppercase mb-2">How to Play</h2>
               <ul className="text-[#8aa1b8] text-sm md:text-base space-y-1 list-none">
                 <li>◈ Select constellation charts below</li>
@@ -498,7 +495,7 @@ export default function Level3() {
 
         {/* Constellation grid — adjusted lower, full width */}
         <div className={`flex-1 transition-all duration-700 ${!lensInserted ? "invisible pointer-events-none" : "opacity-100"}`}>
-          <div className="flex items-center justify-between mb-4 mt-24 md:mt-28">
+          <div className="flex items-center justify-between mb-4 mt-8 md:mt-12 lg:mt-6">
             <p className="font-cinzel text-[#6b9fd4]/50 text-xs tracking-[0.4em] uppercase">
               {lensInserted ? "◈ Select a constellation to trace ◈" : ""}
             </p>
@@ -519,7 +516,7 @@ export default function Level3() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-4">
             {CONSTELLATIONS.map(con => {
               const isWinning = con.isCorrect && (solvedConnections[con.id]?.length || 0) === con.correctConnections.length;
               return (
@@ -554,15 +551,16 @@ export default function Level3() {
 
       {/* Collectible: Stellar Lens — circular display */}
       {!hasLens && !lensInserted && (
-        <CollectibleItem
-          item={{
-            id: "lens_stellar",
-            name: "Stellar Lens",
-            description: "A finely cut brass lens. It refracts starlight in unusual patterns.",
-            iconSrc: "/images/stellar_lens.png"
-          }}
-          className="fixed bottom-16 right-16 z-20 opacity-25 hover:opacity-90 transition-opacity"
-        />
+        <div className="fixed bottom-[18%] right-[13%] z-20 scale-[0.58] opacity-[0.14] brightness-[0.55] saturate-[0.55] transition-all duration-500 hover:scale-75 hover:opacity-80 hover:brightness-110 hover:saturate-100">
+          <CollectibleItem
+            item={{
+              id: "lens_stellar",
+              name: "Stellar Lens",
+              description: "A finely cut brass lens. It refracts starlight in unusual patterns.",
+              iconSrc: "/images/stellar_lens.png"
+            }}
+          />
+        </div>
       )}
 
       {/* Level Complete */}
