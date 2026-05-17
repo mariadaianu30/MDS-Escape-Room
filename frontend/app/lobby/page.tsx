@@ -8,9 +8,8 @@ import "../particles.css";
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY!
-)
+import { supabase } from '@/lib/supabaseClient'
+import { useAudio } from "@/lib/AudioContext"
 
 // Floating dust motes — purely decorative
 const DustMote = ({ style }: { style: React.CSSProperties }) => (
@@ -40,10 +39,7 @@ export default function IntroHome() {
   const [isZooming, setIsZooming] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [isExploring, setIsExploring] = useState(false);
-  
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isMuted, setIsMuted] = useState(true);
-  const [hasInteracted, setHasInteracted] = useState(false);
+  const { isMuted, toggleMusic, hasInteracted, setHasInteracted } = useAudio();
   
   const [shakingDoor, setShakingDoor] = useState<number | null>(null);
   const [isGameOver, setIsGameOver] = useState(false);
@@ -128,42 +124,11 @@ export default function IntroHome() {
     if (comp) {
        setCompletedLevel(parseInt(comp, 10));
     }
-    
-    // Updated to point to a local file. The user will need to put an MP3 file at public/audio/ambient.mp3
-    audioRef.current = new Audio("/audio/ambient.mp3");
-    audioRef.current.loop = true;
-    audioRef.current.volume = 0.5;
 
     return () => {
       document.head.removeChild(style);
-      if (audioRef.current) {
-         audioRef.current.pause();
-      }
     };
   }, []);
-
-  const handleGlobalInteraction = () => {
-     if (!hasInteracted) {
-        setHasInteracted(true);
-        setIsMuted(false);
-        if (audioRef.current) audioRef.current.play().catch(e => console.log("Audio play prevented:", e));
-     }
-  };
-
-  const toggleMusic = (e: React.MouseEvent) => {
-     e.stopPropagation();
-     if (!audioRef.current) return;
-     
-     if (!hasInteracted) setHasInteracted(true);
-
-     if (isMuted) {
-        audioRef.current.play().catch(err => console.log("Audio play blocked by browser:", err));
-        setIsMuted(false);
-     } else {
-        audioRef.current.pause();
-        setIsMuted(true);
-     }
-  };
 
   const attemptEnterDoor = (level: number) => {
     const isUnlocked = level === 1 || completedLevel >= level - 1;
@@ -191,7 +156,7 @@ export default function IntroHome() {
 
   return (
     <main 
-      onClick={handleGlobalInteraction}
+      onClick={() => !hasInteracted && setHasInteracted(true)}
       className={`relative bg-black font-cormorant flex flex-col items-center select-none text-[#e5d8b3] transition-opacity duration-1000 ${isZooming ? "pointer-events-none" : ""} ${!isExploring ? "h-[100dvh] w-full overflow-hidden" : "min-h-screen overflow-x-hidden"}`}
     >
 
@@ -411,21 +376,6 @@ export default function IntroHome() {
             })}
          </div>
 
-         {/* DEBUG / RESET PROGRESS BUTTON */}
-         <div className="pb-16 flex justify-center w-full z-20">
-            <button
-               onClick={() => {
-                  localStorage.removeItem("escapeRoomCompletedLevel");
-                  setCompletedLevel(0);
-                  // Refresh the page
-                  window.location.reload();
-               }}
-               className="text-[#8c7a6b] hover:text-red-500 text-xs font-cinzel tracking-widest border border-[#5c4026] hover:border-red-500 rounded px-4 py-2 transition-all bg-black/50"
-            >
-               RESET PROGRESS
-            </button>
-         </div>
-
          {/* 4. Bottom Play Button Container (Anchored at very bottom sequence) */}
          <div className={`w-full flex justify-center pb-24 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
             <button 
@@ -489,6 +439,18 @@ export default function IntroHome() {
           </div>
         </div>
       )}
+
+      {/* Tiny Debug Reset Progress */}
+      <button
+         onClick={() => {
+            localStorage.removeItem("escapeRoomCompletedLevel");
+            setCompletedLevel(0);
+            window.location.reload();
+         }}
+         className="fixed bottom-2 right-2 text-[#5c4026] hover:text-red-900 text-[8px] font-mono opacity-50 z-50 transition-colors"
+      >
+         [RST]
+      </button>
 
     </main>
   );
