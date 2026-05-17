@@ -31,6 +31,19 @@ export default function AIHintDialog() {
   if (!pathname || !pathname.startsWith('/level')) return null;
 
   const currentLevel = parseInt(pathname.match(/level(\d+)/)?.[1] || "1", 10);
+  const currentPuzzleId = `level${currentLevel}_general`;
+  const oracleButtonPosition = currentLevel === 3
+    ? "bottom-24 left-4 lg:bottom-8 lg:left-6"
+    : "top-28 left-4 lg:top-28 lg:left-6";
+
+  const getPlayerId = () => {
+    const existing = localStorage.getItem("escapeRoomPlayerId");
+    if (existing) return existing;
+
+    const created = crypto.randomUUID();
+    localStorage.setItem("escapeRoomPlayerId", created);
+    return created;
+  };
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +58,12 @@ export default function AIHintDialog() {
       const res = await fetch("/api/hint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ level: currentLevel, userQuestion: userMsg }),
+        body: JSON.stringify({
+          level: currentLevel,
+          puzzleId: currentPuzzleId,
+          playerId: getPlayerId(),
+          userQuestion: userMsg,
+        }),
       });
 
       if (!res.ok) throw new Error("Failed to contact the spirit");
@@ -64,7 +82,7 @@ export default function AIHintDialog() {
       {/* Floating Eye Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed top-28 left-4 lg:top-28 lg:left-6 p-3 bg-black/80 border-2 border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] transition-all rounded-full shadow-[0_0_15px_black] z-[60] flex items-center justify-center group"
+        className={`fixed ${oracleButtonPosition} p-3 bg-black/80 border-2 border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] transition-all rounded-full shadow-[0_0_15px_black] z-[60] flex items-center justify-center group`}
         title="Consult the Spirits"
       >
         <Eye size={24} className="group-hover:animate-pulse" />

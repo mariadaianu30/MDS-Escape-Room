@@ -70,7 +70,7 @@ export default function Level2() {
   
   const [stage, setStage] = useState<GameStage | 'hidden_objects'>('intro');
   const [fadeState, setFadeState] = useState<'in' | 'out'>('in');
-  const { items, equippedItem, removeItem } = useInventory();
+  const { items, equippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
 
   // --- STAGE 0 STATE ---
   const [lineIndex, setLineIndex] = useState(0);
@@ -91,14 +91,64 @@ export default function Level2() {
   const [showHint, setShowHint] = useState(false);
   const [jFeedback, setJFeedback] = useState<{type: "ok"|"err", msg: string} | null>(null);
 
-
-
   // --- STAGE 3 STATE ---
   const [grid, setGrid] = useState<PipeCell[][]>(() => 
     INITIAL_GRID_DATA.map(row => row.map(type => ({
       type, rotation: Math.floor(Math.random() * 4), hasLiquid: false
     })))
   );
+
+  // Real-time Multiplayer Sync for Level 2 Room States
+  useEffect(() => {
+    const unsubStage = onRoomEvent("STAGE_ADVANCED", (payload: any) => {
+      setFadeState('out');
+      setTimeout(() => {
+        setStage(payload.stage);
+        setFadeState('in');
+      }, 800);
+    });
+
+    const unsubObject = onRoomEvent("OBJECT_FOUND", (payload: any) => {
+      setFoundObjects(prev => {
+        if (prev.includes(payload.id)) return prev;
+        return [...prev, payload.id];
+      });
+    });
+
+    const unsubRiddles = onRoomEvent("RIDDLES_SYNC", (payload: any) => {
+      if (payload.filled) setFilled(payload.filled);
+      if (payload.riddle1 !== undefined) setRiddle1(payload.riddle1);
+      if (payload.riddle2 !== undefined) setRiddle2(payload.riddle2);
+      if (payload.riddle3 !== undefined) setRiddle3(payload.riddle3);
+    });
+
+    const unsubPipe = onRoomEvent("PIPE_ROTATED", (payload: any) => {
+      setGrid(prevGrid => {
+        const ng = [...prevGrid];
+        ng[payload.r] = [...ng[payload.r]];
+        ng[payload.r][payload.c] = { ...ng[payload.r][payload.c], rotation: payload.rotation };
+        setTimeout(() => runBFS(ng), 50);
+        return ng;
+      });
+    });
+
+    const unsubUnlock = onRoomEvent("DOOR_UNLOCKED_LVL2", () => {
+      setIsDoorUnlocked(true);
+      setFadeState('out');
+      setTimeout(() => {
+        setStage('victory');
+        setFadeState('in');
+      }, 800);
+    });
+
+    return () => {
+      unsubStage();
+      unsubObject();
+      unsubRiddles();
+      unsubPipe();
+      unsubUnlock();
+    };
+  }, [onRoomEvent]);
 
   // --- GLOBAL CSS INJECTION ---
   useEffect(() => {
@@ -164,12 +214,15 @@ export default function Level2() {
   }, []);
 
   // --- STAGE TRANSITION HELPER ---
-  const advanceTo = (newStage: GameStage) => {
+  const advanceTo = (newStage: GameStage | 'hidden_objects', fromRemote = false) => {
     setFadeState('out');
     setTimeout(() => {
       setStage(newStage);
       setFadeState('in');
     }, 800);
+    if (!fromRemote) {
+      broadcastRoomEvent("STAGE_ADVANCED", { stage: newStage });
+    }
   };
 
   // ----------------------------------------------------------------------------
@@ -191,7 +244,9 @@ export default function Level2() {
     setFilled(p => {
       const n = {...p};
       (Object.keys(n) as BlankId[]).forEach(k => { if(n[k] === w) n[k] = null; });
-      n[id] = w; return n;
+      n[id] = w;
+      broadcastRoomEvent("RIDDLES_SYNC", { filled: n });
+      return n;
     });
   };
   const validateJournal = () => {
@@ -310,6 +365,7 @@ export default function Level2() {
     ng[r][c] = { ...ng[r][c], rotation: (ng[r][c].rotation + 1) % 4 };
     setGrid(ng);
     runBFS(ng);
+    broadcastRoomEvent("PIPE_ROTATED", { r, c, rotation: ng[r][c].rotation });
   };
 
   const handleDoorClick = () => {
@@ -317,6 +373,7 @@ export default function Level2() {
       setIsDoorUnlocked(true);
       removeItem("key_lvl2");
       advanceTo('victory');
+      broadcastRoomEvent("DOOR_UNLOCKED_LVL2", {});
     }
   };
 
@@ -408,19 +465,19 @@ export default function Level2() {
 
         {/* Clickable objects */}
         {!foundObjects.includes('globe') && (
-            <div onClick={() => setFoundObjects(prev => [...prev, 'globe'])}
+            <div onClick={() => { setFoundObjects(prev => [...prev, 'globe']); broadcastRoomEvent("OBJECT_FOUND", { id: 'globe' }); }}
                  className="absolute top-[60%] left-[20%] w-16 h-16 cursor-pointer hover:drop-shadow-[0_0_20px_#d4af37] transition-all flex items-center justify-center z-30 opacity-50 hover:opacity-100 scale-75">
                <img src="/images/globe.png" alt="Globe" className="w-full h-full object-contain drop-shadow-xl" />
             </div>
         )}
         {!foundObjects.includes('ring') && (
-            <div onClick={() => setFoundObjects(prev => [...prev, 'ring'])}
+            <div onClick={() => { setFoundObjects(prev => [...prev, 'ring']); broadcastRoomEvent("OBJECT_FOUND", { id: 'ring' }); }}
                  className="absolute top-[40%] right-[25%] w-12 h-12 cursor-pointer hover:drop-shadow-[0_0_20px_#d4af37] transition-all flex items-center justify-center z-30 opacity-40 hover:opacity-100 scale-75">
                <img src="/images/ring.png" alt="Ring" className="w-full h-full object-contain drop-shadow-xl" />
             </div>
         )}
         {!foundObjects.includes('journal') && (
-            <div onClick={() => setFoundObjects(prev => [...prev, 'journal'])}
+            <div onClick={() => { setFoundObjects(prev => [...prev, 'journal']); broadcastRoomEvent("OBJECT_FOUND", { id: 'journal' }); }}
                  className="absolute bottom-[20%] left-[50%] w-24 h-16 cursor-pointer hover:drop-shadow-[0_0_20px_#d4af37] transition-all flex items-center justify-center z-30 opacity-40 hover:opacity-100 scale-75">
                <img src="/images/journal.png" alt="Journal" className="w-full h-full object-contain drop-shadow-xl" />
             </div>
@@ -456,21 +513,21 @@ export default function Level2() {
                 <div className="mb-4">
                   ☉ First Gate — Solar Calcination:<br/>
                   When Sol stands at his zenith, the number of his sacred metal is LXXIX. From this, subtract the atomic weight of common salt's metal (XI), then add the legs of a spider (VIII). The result names the flame's intensity. One must 
-                  <Blank id="b1" val={filled.b1} onDrop={handleDrop} onRem={(e)=>placeWord('b1',null as any)} /> 
+                  <Blank id="b1" val={filled.b1} onDrop={handleDrop} onRem={() => placeWord('b1',null as any)} /> 
                   the base matter at precisely this degree until only the white ash remains — no more, no less, lest the Sun's gift turns to poison.
                 </div>
 
                 <div className="mb-4">
                   ☽ Second Gate — Lunar Conjunction:<br/>
                   The Moon rules silver, whose number is XLVII. Divide this by the sacred proportion of the trinity (III), round to the nearest whole. This is the number of nights one must 
-                  <Blank id="b2" val={filled.b2} onDrop={handleDrop} onRem={(e)=>placeWord('b2',null as any)} /> 
+                  <Blank id="b2" val={filled.b2} onDrop={handleDrop} onRem={() => placeWord('b2',null as any)} /> 
                   fire and water — Sol and Luna — under open sky, neither vessel covered, neither flame extinguished.
                 </div>
 
                 <div className="mb-4">
                   ♄ Third Gate — Saturnine Rest:<br/>
                   Saturn's lead bears the number LXXXII. Halve it, then subtract the fingers of one hand (V). The residue must 
-                  <Blank id="b3" val={filled.b3} onDrop={handleDrop} onRem={(e)=>placeWord('b3',null as any)} /> 
+                  <Blank id="b3" val={filled.b3} onDrop={handleDrop} onRem={() => placeWord('b3',null as any)} /> 
                   in sealed obsidian for precisely this count of moons, untouched by light, unmoved by hand — Saturn demands patience as the Moon demands silence.
                 </div>
               </div>
@@ -488,16 +545,16 @@ export default function Level2() {
                 
                 <div className="mb-4">
                   I. 'I am born in the belly of stars and die in the palm of kings. The Sun wears me as a crown. The Moon borrows my reflection to seem worthy. Alchemists chase me for a lifetime and find me only when they stop looking. What element am I?' — write the symbol, not the name.
-                  <input type="text" value={riddle1} onChange={e => setRiddle1(e.target.value)} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
+                  <input type="text" value={riddle1} onChange={e => { setRiddle1(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle1: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
                 </div>
                 <div className="mb-4">
                   II. The Moon's sacred metal, rearranged by a mad scholar. Unscramble the letters to find the element that rules tides and dreams: V I L R E S.
-                  <input type="text" value={riddle2} onChange={e => setRiddle2(e.target.value)} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
+                  <input type="text" value={riddle2} onChange={e => { setRiddle2(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle2: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
                 </div>
                 <div className="mb-4">
                   III. Decode this: GLVWLOO<br/>
                   (Caesar shift: each letter moved forward by III — the trinity again). This word is the Third Gate's true name.
-                  <input type="text" value={riddle3} onChange={e => setRiddle3(e.target.value)} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
+                  <input type="text" value={riddle3} onChange={e => { setRiddle3(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle3: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
                 </div>
 
                 <div className="mt-6 text-sm">

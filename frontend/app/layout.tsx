@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { InventoryProvider } from "@/lib/InventoryContext";
 import { TimerProvider } from "@/lib/TimerContext";
+import { AudioProvider } from "@/lib/AudioContext";
 import Inventory from "@/components/Inventory";
 import Timer from "@/components/Timer";
 import AIHintDialog from "@/components/AIHintDialog";
@@ -23,15 +24,17 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Cormorant+Garamond:wght@400;600&family=Roboto+Slab:wght@400&display=swap" rel="stylesheet" />
       </head>
       <body className="font-cormorant">
-        <TimerProvider>
-          <InventoryProvider>
-            <RouteGuard />
-            {children}
-            <Inventory />
-            <Timer />
-            <AIHintDialog />
-          </InventoryProvider>
-        </TimerProvider>
+        <AudioProvider>
+          <TimerProvider>
+            <InventoryProvider>
+              <RouteGuard />
+              {children}
+              <Inventory />
+              <Timer />
+              <AIHintDialog />
+            </InventoryProvider>
+          </TimerProvider>
+        </AudioProvider>
       </body>
     </html>
   );

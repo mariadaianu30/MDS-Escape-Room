@@ -2,16 +2,16 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight } from "lucide-react";
+import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2, Users, LogOut, User } from "lucide-react";
 import "../particles.css";
-
 import { createClient } from '@supabase/supabase-js'
+import { useAudio } from "@/lib/AudioContext"
+import { useInventory } from "@/lib/InventoryContext"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 )
-
 // Floating dust motes — purely decorative
 const DustMote = ({ style }: { style: React.CSSProperties }) => (
   <div className="mote" style={style} />
@@ -36,17 +36,58 @@ const LABELS = [
 
 export default function IntroHome() {
   const router = useRouter();
+  const { roomCode, setRoomCode } = useInventory();
+  const [showMultiplayer, setShowMultiplayer] = useState(false);
+  const [inputRoomCode, setInputRoomCode] = useState("");
+  
+  const [showProfile, setShowProfile] = useState(false);
+  const [userProfile, setUserProfile] = useState<{
+    username: string;
+    email: string;
+    current_level: number;
+    remaining_time: number;
+  } | null>(null);
+
   const [completedLevel, setCompletedLevel] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [isExploring, setIsExploring] = useState(false);
-  
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isMuted, setIsMuted] = useState(true);
-  const [hasInteracted, setHasInteracted] = useState(false);
+  const { isMuted, toggleMusic, hasInteracted, setHasInteracted } = useAudio();
   
   const [shakingDoor, setShakingDoor] = useState<number | null>(null);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+
+  const formatTime = (seconds: number) => {
+    if (!seconds && seconds !== 0) return "30:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (!showLeaderboard) return;
+    const fetchLeaderboard = async () => {
+      setLoadingLeaderboard(true);
+      try {
+        const { data, error } = await supabase
+          .from('player')
+          .select('username, current_level, remaining_time')
+          .order('current_level', { ascending: false })
+          .order('remaining_time', { ascending: false })
+          .limit(10);
+        if (error) throw error;
+        setLeaderboardData(data || []);
+      } catch (err) {
+        console.error("Failed to fetch leaderboard:", err);
+      } finally {
+        setLoadingLeaderboard(false);
+      }
+    };
+    fetchLeaderboard();
+  }, [showLeaderboard]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -60,6 +101,31 @@ export default function IntroHome() {
   }, []);
 
   useEffect(() => {
+    // Check Supabase session and ensure player profile exists (for Google OAuth users)
+    const ensurePlayerProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Check if user exists in player table
+        const { data: player } = await supabase
+          .from('player')
+          .select('id')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (!player) {
+          // If not, they probably logged in via Google for the first time. Create profile.
+          await supabase.from('player').insert([{
+            id: session.user.id,
+            username: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
+            current_level: 1,
+            best_score: 0,
+            remaining_time: 1800
+          }]);
+        }
+      }
+    };
+    ensurePlayerProfile();
+
     const style = document.createElement('style');
     style.innerHTML = `
       @keyframes flicker {
@@ -103,38 +169,39 @@ export default function IntroHome() {
     if (comp) {
        setCompletedLevel(parseInt(comp, 10));
     }
-    
-    audioRef.current = new Audio("https://actions.google.com/sounds/v1/ambiences/huge_water_cave.ogg");
-    audioRef.current.loop = true;
-    audioRef.current.volume = 0.5;
 
     return () => {
       document.head.removeChild(style);
-      if (audioRef.current) {
-         audioRef.current.pause();
-      }
     };
   }, []);
 
-  const handleGlobalInteraction = () => {
-     if (!hasInteracted) {
-        setHasInteracted(true);
-        setIsMuted(false);
-        if (audioRef.current) audioRef.current.play().catch(e => console.log("Audio play prevented:", e));
-     }
-  };
-
-  const toggleMusic = (e: React.MouseEvent) => {
-     e.stopPropagation();
-     if (!audioRef.current) return;
-     if (isMuted) {
-        audioRef.current.play();
-        setIsMuted(false);
-     } else {
-        audioRef.current.pause();
-        setIsMuted(true);
-     }
-  };
+  useEffect(() => {
+    const fetchSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: player } = await supabase
+          .from('player')
+          .select('username, current_level, remaining_time')
+          .eq('id', session.user.id)
+          .single();
+        
+        setUserProfile({
+          username: player?.username || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
+          email: session.user.email || '',
+          current_level: player?.current_level || 1,
+          remaining_time: player?.remaining_time || 1800
+        });
+      } else {
+        setUserProfile({
+          username: 'Anonymous Explorer',
+          email: 'anonymous@catacombs.io',
+          current_level: completedLevel + 1,
+          remaining_time: 1800
+        });
+      }
+    };
+    fetchSession();
+  }, [completedLevel]);
 
   const attemptEnterDoor = (level: number) => {
     const isUnlocked = level === 1 || completedLevel >= level - 1;
@@ -162,8 +229,8 @@ export default function IntroHome() {
 
   return (
     <main 
-      onClick={handleGlobalInteraction}
-      className={`min-h-screen relative bg-black font-cormorant flex flex-col items-center select-none text-[#e5d8b3] transition-opacity duration-1000 overflow-hidden ${isZooming ? "pointer-events-none" : ""}`}
+      onClick={() => !hasInteracted && setHasInteracted(true)}
+      className={`relative bg-black font-cormorant flex flex-col items-center select-none text-[#e5d8b3] transition-opacity duration-1000 ${isZooming ? "pointer-events-none" : ""} ${!isExploring ? "h-[100dvh] w-full overflow-hidden" : "min-h-screen overflow-x-hidden"}`}
     >
 
       {/* ========== HERO LANDING SCREEN ========== */}
@@ -253,35 +320,71 @@ export default function IntroHome() {
       <div className="fixed bottom-0 left-0 right-0 h-[30vh] z-10 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none mix-blend-multiply" />
       <div className="fixed bottom-[-50px] left-[-10vw] right-[-10vw] h-[40vh] z-[12] bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mist-move pointer-events-none opacity-40 mix-blend-screen" />
 
-      <div className={`relative w-full z-20 flex-col items-center transition-transform duration-1000 ${isZooming ? 'corridor-zoom' : ''}`}>
+      <div className={`relative w-full z-20 flex flex-col items-center transition-all duration-1000 ${isZooming ? 'corridor-zoom' : ''} ${!isExploring ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
          
          {/* Top Header UI */}
-         <div className={`w-full flex justify-between items-start pt-14 px-6 md:px-12 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
-            <button 
-               onClick={() => setShowRules(true)}
-               className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
-            >
-               <BookOpen size={16} />
-               <span className="hidden md:inline">How to Play</span>
-            </button>
+         <div className={`relative w-full grid grid-cols-1 lg:grid-cols-3 gap-6 items-center pt-10 px-6 md:px-12 transition-opacity duration-1000 z-50 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
+            
+            {/* Left Column: Rules & Leaderboard */}
+            <div className="flex flex-wrap justify-center lg:justify-start gap-3 items-center order-2 lg:order-1">
+              <button 
+                 onClick={() => setShowRules(true)}
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
+              >
+                 <BookOpen size={16} />
+                 <span>How to Play</span>
+              </button>
 
-            <div className="flex flex-col items-center gap-1">
+              <button 
+                 onClick={() => setShowLeaderboard(true)}
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs md:text-sm font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
+              >
+                 <Trophy size={16} className="text-[#d4af37]" />
+                 <span>Leaderboard</span>
+              </button>
+            </div>
+
+            {/* Center Column: Symmetrical Title */}
+            <div className="flex flex-col items-center gap-1 order-1 lg:order-2 select-none pointer-events-none">
                <span className="font-cinzel text-[10px] tracking-[0.5em] text-[#8c7a6b] uppercase opacity-60">The Ancient Halls</span>
                <h1 className="font-cinzel text-3xl md:text-5xl text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.7)] tracking-[0.1em] text-center font-bold cinematic-title">
                   Escape Room
                </h1>
             </div>
 
-            <button 
-               onClick={toggleMusic}
-               className={`p-3 md:p-4 rounded-full border transition-all backdrop-blur-xl flex items-center justify-center
-               ${!hasInteracted || isMuted 
-                  ? 'bg-black/80 border-[#5c4026]/60 text-[#8c7a6b] hover:text-[#d4af37] hover:border-[#d4af37]' 
-                  : 'bg-black/60 border-[#d4af37] text-[#d4af37] shadow-[0_0_20px_rgba(212,175,55,0.4)]'}
-               `}
-            >
-               {isMuted ? <VolumeX size={22} /> : <Volume2 size={22} className="animate-pulse" />}
-            </button>
+            {/* Right Column: Multiplayer & Audio */}
+            <div className="flex flex-wrap justify-center lg:justify-end gap-3 items-center order-3">
+              <button 
+                 onClick={() => setShowProfile(true)}
+                 className="z-10 flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300"
+              >
+                 <User size={16} />
+                 <span>My Account</span>
+              </button>
+              <button 
+                 onClick={() => setShowMultiplayer(true)}
+                 className={`z-10 flex items-center gap-2 group transition-all bg-black/70 px-5 py-3 uppercase tracking-widest text-xs font-cinzel border rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl animate-in fade-in duration-300
+                    ${roomCode 
+                       ? 'border-[#d4af37] text-[#d4af37]' 
+                       : 'border-[#5c4026]/60 text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37]'
+                    }
+                 `}
+              >
+                 <Users size={16} />
+                 <span>{roomCode ? `Room: ${roomCode}` : "Multiplayer"}</span>
+              </button>
+
+              <button 
+                 onClick={toggleMusic}
+                 className={`z-10 p-3 md:p-3.5 rounded-lg border transition-all backdrop-blur-xl flex items-center justify-center
+                 ${!hasInteracted || isMuted 
+                    ? 'bg-black/80 border-[#5c4026]/60 text-[#8c7a6b] hover:text-[#d4af37] hover:border-[#d4af37]' 
+                    : 'bg-black/60 border-[#d4af37] text-[#d4af37] shadow-[0_0_20px_rgba(212,175,55,0.4)]'}
+                 `}
+              >
+                 {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} className="animate-pulse" />}
+              </button>
+            </div>
          </div>
 
          {/* Scrollable Linear Corridor Logic */}
@@ -350,18 +453,28 @@ export default function IntroHome() {
                         <div className={`relative z-10 p-6 rounded-full border-2 shadow-[0_0_50px_black] bg-black/90 transition-colors duration-500
                            ${isUnlocked ? 'border-[#5c4026] group-hover:bg-[#2a1d0f]' : 'border-red-900'}
                         `}>
-                           {!isUnlocked ? (
-                              <div className="relative group/lock">
-                                 <Lock className="w-12 h-12 md:w-16 md:h-16 text-red-600/80" strokeWidth={2} />
+                           <div className="relative group/lock">
+                              {/* Number ALWAYS visible */}
+                              <div className={`text-4xl md:text-5xl font-cinzel text-center w-12 h-12 md:w-16 md:h-16 font-bold flex items-center justify-center
+                                 ${isUnlocked ? 'text-[#e5d8b3] drop-shadow-[0_0_10px_white]' : 'text-red-700/80 drop-shadow-[0_0_15px_rgba(200,0,0,0.6)]'}
+                              `}>
+                                 {level}
+                              </div>
+
+                              {/* Tiny lock icon if not unlocked */}
+                              {!isUnlocked && (
+                                 <div className="absolute -bottom-2 -right-2 bg-black p-1.5 rounded-full border border-red-900 shadow-[0_0_10px_black]">
+                                    <Lock size={16} className="text-red-600" strokeWidth={2.5} />
+                                 </div>
+                              )}
+                              
+                              {/* Hover tooltip for locked doors */}
+                              {!isUnlocked && (
                                  <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[220px] bg-[#1a1107] border border-red-900 text-red-400 text-sm px-4 py-2 rounded opacity-0 group-hover/lock:opacity-100 transition-opacity font-cormorant text-center pointer-events-none">
                                     Complete the previous level to unlock
                                  </div>
-                              </div>
-                           ) : (
-                              <div className="text-4xl md:text-5xl font-cinzel text-[#e5d8b3] text-center w-12 h-12 md:w-16 md:h-16 font-bold flex items-center justify-center drop-shadow-[0_0_10px_white]">
-                                 {level}
-                              </div>
-                           )}
+                              )}
+                           </div>
                         </div>
                         )}
                      </div>
@@ -414,6 +527,264 @@ export default function IntroHome() {
          </div>
       )}
 
+      {/* Leaderboard Modal overlay */}
+      {showLeaderboard && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
+            <div className="relative max-w-3xl w-full mx-auto bg-[#150e09] border-[3px] border-[#d4af37] p-10 md:p-14 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')]">
+               
+               <button 
+                  onClick={() => setShowLeaderboard(false)}
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+               >
+                  X
+               </button>
+
+               <div className="flex flex-col items-center mb-8 gap-1">
+                  <Trophy size={40} className="text-[#d4af37] animate-pulse drop-shadow-[0_0_10px_rgba(212,175,55,0.8)]" />
+                  <h2 className="font-cinzel text-4xl md:text-5xl text-[#d4af37] text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold uppercase">Hall of Fame</h2>
+                  <span className="font-cinzel text-xs tracking-[0.3em] text-[#8c7a6b] uppercase opacity-75">Top Explorers</span>
+               </div>
+
+               {loadingLeaderboard ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4">
+                     <Loader2 size={40} className="text-[#d4af37] animate-spin" />
+                     <p className="font-cinzel text-sm text-[#8c7a6b] tracking-wider animate-pulse">Decrypting scrolls...</p>
+                  </div>
+               ) : leaderboardData.length === 0 ? (
+                  <div className="text-center py-16">
+                     <p className="italic text-[#e5d8b3] font-cormorant text-2xl">"No explorer has yet escaped the ancient depths..."</p>
+                  </div>
+               ) : (
+                  <div className="overflow-x-auto w-full max-h-[50vh] scrollbar-thin scrollbar-thumb-[#5c4026] pr-2">
+                     <table className="w-full text-left font-cormorant border-collapse">
+                        <thead>
+                           <tr className="border-b border-[#5c4026] font-cinzel text-xs tracking-wider text-[#8c7a6b]">
+                              <th className="py-3 px-2 text-center w-16">Rank</th>
+                              <th className="py-3 px-4">Explorer</th>
+                              <th className="py-3 px-4 text-center">Highest Chamber</th>
+                              <th className="py-3 px-4 text-center">Remaining Time</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {leaderboardData.map((player, index) => {
+                              const isTop1 = index === 0;
+                              const isTop2 = index === 1;
+                              const isTop3 = index === 2;
+                              const highestChamber = player.current_level || 1;
+                              
+                              let rankColor = "text-[#c7baaa]";
+                              if (isTop1) rankColor = "text-[#d4af37] font-bold drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]";
+                              else if (isTop2) rankColor = "text-[#a0a0a0] font-bold";
+                              else if (isTop3) rankColor = "text-[#b08d57] font-bold";
+
+                              return (
+                                 <tr key={index} className="border-b border-[#5c4026]/40 hover:bg-white/5 transition-colors text-lg md:text-xl text-[#e5d8b3]">
+                                    <td className={`py-4 px-2 text-center font-cinzel font-bold ${rankColor}`}>
+                                       {isTop1 ? "I" : isTop2 ? "II" : isTop3 ? "III" : index + 1}
+                                    </td>
+                                    <td className={`py-4 px-4 font-bold flex items-center gap-2 ${isTop1 ? "text-[#ffedb3]" : ""}`}>
+                                       {player.username || "Unknown"}
+                                       {isTop1 && <Trophy size={16} className="text-[#d4af37]" />}
+                                    </td>
+                                    <td className="py-4 px-4 text-center">
+                                       Chamber {highestChamber}
+                                    </td>
+                                    <td className="py-4 px-4 text-center font-mono text-sm tracking-wider text-red-300">
+                                       {formatTime(player.remaining_time)}
+                                    </td>
+                                 </tr>
+                              );
+                           })}
+                        </tbody>
+                     </table>
+                  </div>
+               )}
+            </div>
+         </div>
+      )}
+
+      {/* 6. Multiplayer Modal overlay */}
+      {showMultiplayer && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
+            <div className="relative max-w-xl w-full mx-auto bg-[#150e09] border-[3px] border-[#d4af37] p-10 md:p-14 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] font-cinzel">
+               
+               <button 
+                  onClick={() => setShowMultiplayer(false)}
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+               >
+                  X
+               </button>
+
+               <div className="flex flex-col items-center mb-8 gap-2">
+                  <Users size={40} className="text-[#d4af37] drop-shadow-[0_0_10px_rgba(212,175,55,0.8)] animate-pulse" />
+                  <h2 className="font-cinzel text-4xl text-[#d4af37] text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold uppercase">Multiplayer</h2>
+                  <span className="font-cinzel text-xs tracking-[0.3em] text-[#8c7a6b] uppercase opacity-75">Shared Session Room</span>
+               </div>
+
+               <div className="flex flex-col gap-6 text-[#e5d8b3] text-center">
+                  {roomCode ? (
+                     <div className="space-y-6">
+                        <div className="p-6 bg-[#2a1d0f] border-2 border-[#5c4026] rounded-xl">
+                           <p className="text-[#8c7a6b] text-sm uppercase tracking-widest mb-2">Connected to Chamber</p>
+                           <h3 className="text-4xl text-[#d4af37] font-bold tracking-[0.2em]">{roomCode}</h3>
+                        </div>
+                        <p className="text-lg font-cormorant italic text-[#a89f91] px-4 leading-relaxed">
+                           "Your inventory and progression are now bound to all players inside this specific chamber. Items gathered will instantly synchronise."
+                        </p>
+                        <button
+                           onClick={() => {
+                              setRoomCode(null);
+                           }}
+                           className="w-full py-4 px-6 border-2 border-red-900 text-red-400 hover:bg-red-950/40 hover:border-red-600 rounded-lg tracking-widest font-bold transition-all uppercase flex items-center justify-center gap-2 duration-300"
+                        >
+                           <LogOut size={18} />
+                           Leave Session Room
+                        </button>
+                     </div>
+                  ) : (
+                     <div className="space-y-8">
+                        <div className="space-y-4">
+                           <h3 className="text-xl text-[#c7baaa] uppercase tracking-wider">Host a Private Session</h3>
+                           <button
+                              onClick={() => {
+                                 // Generate random 6-character room code
+                                 const generatedCode = "ESC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                                 setRoomCode(generatedCode);
+                              }}
+                              className="w-full py-4 px-6 bg-gradient-to-r from-[#d4af37] to-[#b08d57] text-black hover:brightness-110 rounded-lg tracking-widest font-bold transition-all uppercase shadow-[0_0_35px_rgba(212,175,55,0.3)] duration-300"
+                           >
+                              Generate Room Code
+                           </button>
+                        </div>
+
+                        <div className="relative flex py-4 items-center">
+                           <div className="flex-grow border-t border-[#5c4026]/60"></div>
+                           <span className="flex-shrink mx-4 text-[#8c7a6b] text-sm uppercase tracking-widest">or</span>
+                           <div className="flex-grow border-t border-[#5c4026]/60"></div>
+                        </div>
+
+                        <div className="space-y-4">
+                           <h3 className="text-xl text-[#c7baaa] uppercase tracking-wider">Join Existing Session</h3>
+                           <div className="flex gap-3">
+                              <input
+                                 type="text"
+                                 value={inputRoomCode}
+                                 onChange={(e) => setInputRoomCode(e.target.value.toUpperCase())}
+                                 placeholder="ENTER ROOM CODE"
+                                 className="flex-1 py-4 px-6 bg-black/80 border-2 border-[#5c4026] text-[#e5d8b3] rounded-lg tracking-widest text-center focus:border-[#d4af37] focus:outline-none transition-all placeholder:text-[#5c4026]"
+                              />
+                              <button
+                                 onClick={() => {
+                                    if (inputRoomCode.trim()) {
+                                       setRoomCode(inputRoomCode.trim());
+                                       setInputRoomCode("");
+                                    }
+                                 }}
+                                 className="py-4 px-8 bg-transparent border-2 border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black rounded-lg tracking-widest font-bold transition-all uppercase duration-300"
+                              >
+                                 Join
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+                  )}
+               </div>
+
+            </div>
+         </div>
+      )}
+
+      {/* 7. Explorer Profile Modal (My Account) */}
+      {showProfile && userProfile && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
+            <div className="relative max-w-2xl w-full mx-auto bg-[#130d0a] border-[3px] border-[#d4af37] p-8 md:p-12 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.35)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] font-cinzel overflow-y-auto max-h-[90vh]">
+               
+               <button 
+                  onClick={() => setShowProfile(false)}
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+               >
+                  X
+               </button>
+
+               <div className="flex flex-col items-center mb-8 gap-2 border-b border-[#5c4026]/40 pb-6">
+                  <div className="w-20 h-20 rounded-full border-2 border-[#d4af37] bg-black flex items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.4)] mb-2">
+                     <User size={38} className="text-[#d4af37] drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]" />
+                  </div>
+                  <h2 className="font-cinzel text-3xl text-[#d4af37] text-center tracking-widest font-bold uppercase">{userProfile.username}</h2>
+                  <span className="font-cinzel text-xs tracking-[0.3em] text-[#8c7a6b] uppercase opacity-75">{userProfile.email}</span>
+                  <span className="mt-2 px-4 py-1 border border-[#d4af37]/40 bg-[#23170e]/80 text-[#d4af37] rounded-full text-xs tracking-wider uppercase font-bold">
+                     {completedLevel >= 5 ? "👑 Grandmaster Explorer" : "📜 Veteran Explorer"}
+                  </span>
+               </div>
+
+               <div className="space-y-8 text-[#e5d8b3]">
+                  {/* Progress Block */}
+                  <div className="space-y-4">
+                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Adventure Journal</h3>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Chambers Conquered</p>
+                           <p className="text-2xl font-bold">{completedLevel} / 5 Floors</p>
+                        </div>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Current Standing</p>
+                           <p className="text-2xl font-bold text-[#d4af37]">Chamber {completedLevel + 1}</p>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Team Chronicles & Sprints */}
+                  <div className="space-y-4">
+                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Co-Op Campaign Records</h3>
+                     <div className="space-y-3">
+                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                           <div>
+                              <p className="text-lg font-bold text-[#ffedb3]">Chamber I: The Library</p>
+                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Ionel, Vlad, Pupăză, Dăianu</p>
+                           </div>
+                           <div className="text-right">
+                              <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
+                                 14m 20s · ESCAPED
+                              </span>
+                           </div>
+                        </div>
+
+                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                           <div>
+                              <p className="text-lg font-bold text-[#ffedb3]">Chamber II: The Alchemist's Lab</p>
+                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Ionel, Dăianu</p>
+                           </div>
+                           <div className="text-right">
+                              <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
+                                 21m 45s · ESCAPED
+                              </span>
+                           </div>
+                        </div>
+
+                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-60 hover:opacity-100 transition-opacity">
+                           <div>
+                              <p className="text-lg font-bold text-[#ffedb3]">Chamber III: The Tower</p>
+                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Co-Op Squad</p>
+                           </div>
+                           <div className="text-right">
+                              <span className="px-3 py-1 bg-red-950/40 border border-red-900 text-red-400 rounded text-xs font-mono font-bold tracking-widest">
+                                 FAILED · TIME EXPIRED
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Footnote */}
+                  <p className="text-center font-cormorant italic text-sm text-[#8c7a6b] pt-4">
+                     "The ancient records are bound in stone, detailing the path you and your compatriots have walked."
+                  </p>
+               </div>
+
+            </div>
+         </div>
+      )}
+
       {isGameOver && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-red-950/90 backdrop-blur-md animate-in fade-in duration-500">
           <div className="p-12 border-2 border-red-800 bg-[#0a0705] text-center rounded shadow-[0_0_150px_rgba(200,0,0,0.6)] max-w-lg flex flex-col items-center">
@@ -435,6 +806,21 @@ export default function IntroHome() {
         </div>
       )}
 
+      {/* Tiny Debug Reset Progress */}
+      <button
+         onClick={() => {
+            localStorage.removeItem("escapeRoomCompletedLevel");
+            setCompletedLevel(0);
+            window.location.reload();
+         }}
+         className="fixed bottom-2 right-2 text-[#5c4026] hover:text-red-900 text-[8px] font-mono opacity-50 z-50 transition-colors"
+      >
+         [RST]
+      </button>
+
     </main>
   );
 }
+
+
+
