@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
 import CollectibleItem from "@/components/CollectibleItem";
-import Timer from "@/components/Timer";
 import confetti from "canvas-confetti";
 
 const GAME_DURATION = 30 * 60;
@@ -433,7 +432,7 @@ export default function Level3() {
         </h1>
       </div>
 
-      {!showLevelComplete && !isGameOver && <Timer key={`timer-${gameId}`} timeLeft={timeLeft} />}
+
 
       {/* ─── Game Layout — shifted down slightly ─── */}
       <div className="relative z-10 w-full flex flex-col lg:flex-row items-start justify-center gap-4 px-4 md:px-10 mt-4 pb-4">
