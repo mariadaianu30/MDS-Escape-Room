@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
+import { usePersistentState } from "@/lib/usePersistentState";
 import CollectibleItem from "@/components/CollectibleItem";
 import confetti from "canvas-confetti";
 
@@ -27,18 +28,18 @@ export default function Level5Page() {
 
   // Scene state
   const [view, setView] = useState<"main" | "levers" | "altar" | "chest">("main");
-  const [leverPositions, setLeverPositions] = useState<("u" | "d")[]>(["u", "u", "u"]);
-  const [leversSolved, setLeversSolved] = useState(false);
-  const [isAltarCleaned, setIsAltarCleaned] = useState(false);
+  const [leverPositions, setLeverPositions] = usePersistentState<("u" | "d")[]>("escapeRoomLevel5LeverPositions", ["u", "u", "u"]);
+  const [leversSolved, setLeversSolved] = usePersistentState("escapeRoomLevel5LeversSolved", false);
+  const [isAltarCleaned, setIsAltarCleaned] = usePersistentState("escapeRoomLevel5AltarCleaned", false);
   const [showNote, setShowNote] = useState(false);
   
   // Rotation Puzzle State - BACK TO 3 RINGS
-  const [ringRotations, setRingRotations] = useState<number[]>([90, 0, 270]);
-  const [chestOpen, setChestOpen] = useState(false);
+  const [ringRotations, setRingRotations] = usePersistentState<number[]>("escapeRoomLevel5RingRotations", [90, 0, 270]);
+  const [chestOpen, setChestOpen] = usePersistentState("escapeRoomLevel5ChestOpen", false);
   
-  const [altarSlots, setAltarSlots] = useState<(string | null)[]>([null, null, null, null]);
-  const [doorOpen, setDoorOpen] = useState(false);
-  const [victoryStats, setVictoryStats] = useState<VictoryStats | null>(null);
+  const [altarSlots, setAltarSlots] = usePersistentState<(string | null)[]>("escapeRoomLevel5AltarSlots", [null, null, null, null]);
+  const [doorOpen, setDoorOpen] = usePersistentState("escapeRoomLevel5DoorOpen", false);
+  const [victoryStats, setVictoryStats] = usePersistentState<VictoryStats | null>("escapeRoomVictoryStats", null);
   const [notification, setNotification] = useState<string | null>(null);
 
   const dialRef = useRef<HTMLDivElement>(null);
