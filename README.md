@@ -89,6 +89,15 @@ AI tooling was also used extensively throughout the development process itself �
 - Final door unlock triggered only when all puzzles are solved
 - Victory screen displaying total elapsed time and score; optional leaderboard integration
 
+### Multiplayer & Real-Time Sync (Sprint 4 Planned)
+
+- **Hosted Sessions**: Host or join escape rooms via a secure, unique 6-digit room code
+- **WebSocket Synchronization**: Instantly synchronize room states, chest unlocks, and dial rotations
+- **Shared Team Inventory**: Items collected by any teammate are added to a global context accessible to all
+- **Collaborative Roles**: Optional asymmetric assignments (Scribe, Artisan, Oracle) to force verbal team solving
+- **Shared AI Assistance**: Unified team chat with Hint/Narrator agents sharing a global 60s cooldown limit
+- **Synchronized Team Leaderboard**: High-performance team ranking boards directly integrated with Supabase
+
 ---
 
 ## Architecture
@@ -290,7 +299,7 @@ No code reaches `main` without a passing build. Failure notifications are sent t
 
 ## Backlog
 
-The full product backlog is available in [`docs/backlog.pdf`](docs/backlog.pdf). It includes all user stories with complete acceptance criteria, story point estimates, MoSCoW classification, sprint assignments, and inter-story dependencies.
+The full product backlog is available in [`docs/backlog.pdf`](docs/backlog.pdf). The collaborative multiplayer backlog is located in [`docs/multiplayer-backlog.md`](docs/multiplayer-backlog.md).
 
 ### Sprint Overview
 
@@ -299,7 +308,8 @@ The full product backlog is available in [`docs/backlog.pdf`](docs/backlog.pdf).
 | Sprint 1 | US1, US2, US3, US4 | 15 | Core exploration and puzzle mechanics |
 | Sprint 2 | US5, US6, US7, US8, US10, US12, US13 | 33 | Inventory, AI interaction, agent backends |
 | Sprint 3 | US9, US11, US14, US15, US16 | 22 | Narration, win condition, testing, CI/CD |
-| **Total** | **16 user stories** | **70 story points** | |
+| **Sprint 4** | **US17, US18, US19, US20, US21, US22, US23** | **52** | **Multiplayer Extension & Synchronized Leaderboard** |
+| **Total** | **23 user stories** | **122 story points** | |
 
 ### Epics
 
@@ -312,6 +322,7 @@ The full product backlog is available in [`docs/backlog.pdf`](docs/backlog.pdf).
 | Game Logic | US10, US11 | High | Feedback, progression, and win condition |
 | AI System | US12, US13, US14 | Critical | Puzzle, Hint, and Narrator agent backends |
 | Development | US15, US16 | Medium | Automated tests and CI/CD pipeline |
+| Multiplayer Core / Sync | US17, US18, US19, US20, US21, US22, US23 | High | Real-time session synchronization, shared inventory, asymmetrical roles, and team leaderboard. |
 
 ### Selected Acceptance Criteria
 
@@ -416,6 +427,35 @@ When the CI pipeline triggers
 Then the build completes successfully
 And all tests run automatically
 And failing builds block merges to main
+```
+
+</details>
+
+<details>
+<summary><strong>US17 — Room Code & Multiplayer Sessions</strong></summary>
+
+```
+Given a player is in the main lobby
+When they click "Host Game"
+Then a unique 6-digit room code is generated
+And they are placed in a multiplayer staging area
+
+Given other players enter this 6-digit room code
+When they click "Join Game"
+Then they are added to the exact same shared lobby instance
+```
+
+</details>
+
+<details>
+<summary><strong>US19 — Shared Team Inventory</strong></summary>
+
+```
+Given Player A picks up an item in the room
+When they collect it
+Then it is removed from the scene for all players
+And it instantly appears in the shared team inventory visible to Player B
+And any player in the team can equip or examine the item
 ```
 
 </details>
