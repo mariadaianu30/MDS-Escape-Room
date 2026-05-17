@@ -4,13 +4,13 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight } from "lucide-react";
 import "../particles.css";
-
 import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-import { supabase } from '@/lib/supabaseClient'
 import { useAudio } from "@/lib/AudioContext"
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_KEY!
+)
 // Floating dust motes — purely decorative
 const DustMote = ({ style }: { style: React.CSSProperties }) => (
   <div className="mote" style={style} />
@@ -455,3 +455,5 @@ export default function IntroHome() {
     </main>
   );
 }
+
+
