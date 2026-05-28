@@ -487,10 +487,10 @@ export default function IntroHome() {
          {/* 4. Bottom Play Button Container (Anchored at very bottom sequence) */}
          <div className={`w-full flex justify-center pb-24 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
             <button 
-               onClick={() => attemptEnterDoor(1)}
+               onClick={() => attemptEnterDoor(Math.min(completedLevel + 1, 5))}
                className="font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] px-16 py-6 rounded-xl shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] hover:scale-105 active:scale-95 transition-all duration-300 uppercase animate-pulse border-4 border-white/50"
             >
-               Play 
+               {completedLevel > 0 ? `Resume (Ch1-${Math.min(completedLevel + 1, 5)})` : "Play"}
             </button>
          </div>
 

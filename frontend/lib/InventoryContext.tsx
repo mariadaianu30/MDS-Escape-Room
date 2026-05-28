@@ -38,6 +38,8 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [equippedItem, setEquippedItem] = useState<string | null>(null);
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [username, setUsername] = useState<string>("Explorer");
+  const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
   
   // Unique client identity to prevent circular broadcast loops
   const clientIdRef = useRef<string>("");
@@ -46,6 +48,46 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     clientIdRef.current = "client_" + Math.random().toString(36).substring(2, 11);
   }, []);
+
+  // Fetch logged-in user profile or email fallback
+  useEffect(() => {
+    async function fetchUsername() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: player } = await supabase
+            .from('player')
+            .select('username')
+            .eq('id', session.user.id)
+            .single();
+          if (player?.username) {
+            setUsername(player.username);
+            localStorage.setItem("escapeRoomUsername", player.username);
+          } else if (session.user.user_metadata?.full_name) {
+            setUsername(session.user.user_metadata.full_name);
+          } else if (session.user.email) {
+            setUsername(session.user.email.split('@')[0]);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch username in InventoryProvider", e);
+      }
+    }
+    fetchUsername();
+
+    const saved = localStorage.getItem("escapeRoomUsername");
+    if (saved) {
+      setUsername(saved);
+    }
+  }, []);
+
+  const addToast = (message: string) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // Load inventory and room code from persistent storage on mount
   useEffect(() => {
@@ -105,17 +147,21 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         if (!payload || payload.senderId === clientIdRef.current) return;
         
         console.log(`[Multiplayer Inventory] Broadcast received:`, payload);
+        const name = payload.senderName || "A teammate";
 
         if (payload.action === "ADD_ITEM") {
           setItems((prev) => {
             if (prev.some((i) => i.id === payload.item.id)) return prev;
             return [...prev, payload.item];
           });
+          addToast(`${name} picked up ${payload.item.name}!`);
         } else if (payload.action === "REMOVE_ITEM") {
           setItems((prev) => prev.filter((i) => i.id !== payload.itemId));
+          addToast(`${name} used ${payload.itemName}!`);
         } else if (payload.action === "CLEAR_INVENTORY") {
           setItems([]);
           setEquippedItem(null);
+          addToast(`${name} cleared the shared inventory!`);
         }
       })
       .on("broadcast", { event: "room_event" }, ({ payload }) => {
@@ -153,13 +199,16 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         payload: {
           action: "ADD_ITEM",
           item,
-          senderId: clientIdRef.current
+          senderId: clientIdRef.current,
+          senderName: username
         }
       });
     }
   };
 
   const removeItem = (id: string) => {
+    const item = items.find(i => i.id === id);
+    const itemName = item ? item.name : "an item";
     if (equippedItem === id) setEquippedItem(null);
     setItems((prev) => prev.filter((i) => i.id !== id));
 
@@ -172,7 +221,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         payload: {
           action: "REMOVE_ITEM",
           itemId: id,
-          senderId: clientIdRef.current
+          itemName,
+          senderId: clientIdRef.current,
+          senderName: username
         }
       });
     }
@@ -195,7 +246,8 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         event: "inventory_sync",
         payload: {
           action: "CLEAR_INVENTORY",
-          senderId: clientIdRef.current
+          senderId: clientIdRef.current,
+          senderName: username
         }
       });
     }
@@ -243,6 +295,18 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-24 right-4 z-[9999] flex flex-col gap-3 pointer-events-none select-none">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className="bg-[#150e09]/95 border-2 border-[#d4af37] text-[#e5d8b3] px-5 py-3 rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.4)] animate-in fade-in slide-in-from-bottom-5 duration-300 font-cinzel text-xs tracking-wider border-t-4 border-t-[#d4af37] w-64 text-center border-l-2 border-r-2"
+            >
+              {toast.message}
+            </div>
+          ))}
+        </div>
+      )}
     </InventoryContext.Provider>
   );
 }
