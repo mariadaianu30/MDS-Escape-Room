@@ -1,10 +1,16 @@
 "use client";
 
-interface TimerProps {
-  timeLeft: number;
-}
+import { useTimer } from "@/lib/TimerContext";
+import { usePathname } from "next/navigation";
 
-export default function Timer({ timeLeft }: TimerProps) {
+export default function Timer() {
+  const { timeLeft, isGameOver } = useTimer();
+  const pathname = usePathname();
+
+  // Hide timer on the home/lobby pages
+  if (!pathname || !pathname.startsWith('/level')) return null;
+  if (isGameOver) return null;
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;

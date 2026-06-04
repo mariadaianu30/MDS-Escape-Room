@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SudokuGrid from "@/components/SudokuGrid";
 import CombinationLock from "@/components/CombinationLock";
@@ -8,23 +8,28 @@ import Timer from "@/components/Timer";
 import CollectibleItem from "@/components/CollectibleItem";
 import confetti from "canvas-confetti";
 import { useInventory } from "@/lib/InventoryContext";
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_KEY!
+)
 
 const GAME_DURATION = 30 * 60;
 
 export default function Level1() {
   const router = useRouter();
-  const { hasItem, items, equippedItem, setEquippedItem, removeItem } = useInventory();
+  const { hasItem, items, equippedItem, setEquippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
   const hasCompass = hasItem("brass_compass_lvl1");
   const hasEraser = hasItem("chalk_eraser_lvl1");
   const [gameId, setGameId] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [extractedCode, setExtractedCode] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [showLevelComplete, setShowLevelComplete] = useState(false);
   const [isBlackboardCleaned, setIsBlackboardCleaned] = useState(false);
   const [isLockUnjammed, setIsLockUnjammed] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
-
+  
   const showNotification = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
@@ -32,16 +37,42 @@ export default function Level1() {
 
   // Game Over states
   const [isGameOver, setIsGameOver] = useState(false);
-  const [gameOverReason, setGameOverReason] = useState<"mistakes" | "time" | null>(null);
 
-  // Initial Load Timer
+  // Real-time Multiplayer Sync for Room States
   useEffect(() => {
-    const endTimeStr = localStorage.getItem("escapeRoomEndTime");
-    if (!endTimeStr) {
-      router.push("/");
-      return;
-    }
-  }, [router]);
+    const unsubClean = onRoomEvent("BLACKBOARD_CLEANED", () => {
+      setIsBlackboardCleaned(true);
+      showNotification("Teammate wiped the blackboard clean!");
+    });
+    const unsubUnjam = onRoomEvent("LOCK_UNJAMMED", () => {
+      setIsLockUnjammed(true);
+      showNotification("Teammate unjammed the rusted lock!");
+    });
+    const unsubUnlock = onRoomEvent("DOOR_UNLOCKED", (payload: any) => {
+      setIsUnlocked(true);
+      if (payload?.code) {
+        setExtractedCode(payload.code);
+      }
+      showNotification("Teammate unlocked the heavy door! Escaping...");
+      
+      confetti({
+        particleCount: 200,
+        spread: 160,
+        origin: { y: 0.6 },
+        colors: ['#d4af37', '#8c7a6b', '#ffffff', '#e5d8b3']
+      });
+
+      setTimeout(() => {
+        setShowLevelComplete(true);
+      }, 3000);
+    });
+
+    return () => {
+      unsubClean();
+      unsubUnjam();
+      unsubUnlock();
+    };
+  }, [onRoomEvent]);
 
   // Custom Mouse Cursor when Item Equipped!
   useEffect(() => {
@@ -56,34 +87,6 @@ export default function Level1() {
     return () => { document.body.style.cursor = 'auto'; };
   }, [equippedItem, items]);
 
-  // Global Timer Loop
-  useEffect(() => {
-    if (isUnlocked || isGameOver || showLevelComplete) return;
-
-    const interval = setInterval(() => {
-      const endTimeStr = localStorage.getItem("escapeRoomEndTime");
-      if (!endTimeStr) return;
-
-      const endTime = parseInt(endTimeStr, 10);
-      const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-
-      setTimeLeft(remaining);
-
-      if (remaining <= 0) {
-        clearInterval(interval);
-        handleTimeUp();
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isUnlocked, isGameOver, showLevelComplete, gameId]);
-
-  const handleTimeUp = () => {
-    setGameOverReason("time");
-    setIsGameOver(true);
-    setTimeout(() => restartGame(), 4000);
-  };
-
   const handleBlackboardClick = () => {
     if (isBlackboardCleaned) return;
     if (equippedItem === "chalk_eraser_lvl1") {
@@ -91,6 +94,7 @@ export default function Level1() {
       showNotification("You wiped the blackboard clean.");
       removeItem("chalk_eraser_lvl1");
       setEquippedItem(null);
+      broadcastRoomEvent("BLACKBOARD_CLEANED", {});
     } else {
       showNotification("The blackboard is covered in thick dust. You need to use something to wipe it clean.");
     }
@@ -103,6 +107,7 @@ export default function Level1() {
       showNotification("You used the sturdy brass compass to force the rusted gears open!");
       removeItem("brass_compass_lvl1");
       setEquippedItem(null);
+      broadcastRoomEvent("LOCK_UNJAMMED", {});
     } else {
       showNotification("The mechanism is jammed and rusted. You need a sturdy tool to force it open.");
     }
@@ -117,7 +122,7 @@ export default function Level1() {
     }
   };
 
-  const handleDoorUnlocked = () => {
+  const handleDoorUnlocked = async () => {
     setIsUnlocked(true);
 
     // Mark as completed in persistent storage!
@@ -125,6 +130,9 @@ export default function Level1() {
     if (savedLevel < 1) {
       localStorage.setItem("escapeRoomCompletedLevel", "1");
     }
+
+    broadcastRoomEvent("DOOR_UNLOCKED", { code: extractedCode || "7391" });
+
 
     confetti({
       particleCount: 200,
@@ -139,23 +147,15 @@ export default function Level1() {
   };
 
   const handleMistakesGameOver = () => {
-    setGameOverReason("mistakes");
     setIsGameOver(true);
     setTimeout(() => restartGame(), 4000);
   };
 
   const restartGame = () => {
     setIsGameOver(false);
-    setGameOverReason(null);
     setExtractedCode(null);
     setIsUnlocked(false);
     setShowLevelComplete(false);
-
-    if (gameOverReason === "time") {
-      // Reset global clock strictly!
-      localStorage.setItem("escapeRoomEndTime", (Date.now() + GAME_DURATION * 1000).toString());
-    }
-
     setGameId((prev) => prev + 1);
   };
 
@@ -163,6 +163,10 @@ export default function Level1() {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleSaveAndExit = async () => {
+    router.push("/lobby");
   };
 
   return (
@@ -173,6 +177,16 @@ export default function Level1() {
         className="fixed inset-0 z-0 opacity-40 mix-blend-screen bg-cover bg-center"
         style={{ backgroundImage: 'url(/images/library.png)' }}
       />
+
+      {/* Top Header with Save & Exit */}
+      <div className="absolute top-4 left-4 z-50">
+        <button 
+          onClick={handleSaveAndExit}
+          className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-4 py-2 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
+        >
+          Save & Exit
+        </button>
+      </div>
 
       {/* Title */}
       <div className="relative z-20 mt-5 mb-2 flex flex-col items-center w-full">
@@ -186,8 +200,7 @@ export default function Level1() {
         </h1>
       </div>
 
-      {/* Timer */}
-      {!showLevelComplete && !isGameOver && <Timer key={`timer-${gameId}`} timeLeft={timeLeft} />}
+      {/* Timer is now rendered in layout.tsx globally */}
 
       <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-12 md:gap-24 overflow-hidden mt-6">
 
@@ -312,8 +325,7 @@ export default function Level1() {
             </p>
 
             <div className="bg-black/60 p-6 rounded-lg border border-[#3c2a1a] mb-8 w-full shadow-[inset_0_0_30px_black]">
-              <p className="text-2xl text-[#d4af37] font-bold mb-2">You escaped in {formatElapsed(GAME_DURATION - timeLeft)}!</p>
-              <p className="text-lg text-[#8c7a6b]">Time remaining for the full game: {formatElapsed(timeLeft)}</p>
+              <p className="text-2xl text-[#d4af37] font-bold mb-2">You escaped the Mathematical Library!</p>
             </div>
 
             <button
@@ -330,12 +342,10 @@ export default function Level1() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 backdrop-blur-lg animate-in fade-in duration-500">
           <div className="p-12 border-2 border-red-800 bg-black/90 text-center rounded shadow-[0_0_150px_rgba(200,0,0,0.6)] max-w-lg flex flex-col items-center">
             <h1 className="text-6xl font-cinzel font-bold text-red-500 mb-6 drop-shadow-[0_0_20px_red]">
-              {gameOverReason === "time" ? "Time's Up" : "Game Over"}
+              Game Over
             </h1>
             <p className="text-2xl text-red-300 mb-8 font-cormorant leading-relaxed">
-              {gameOverReason === "time"
-                ? "The countdown has reached zero. The doors seal shut forever. Restarting timeline..."
-                : "The mechanism has locked up due to too many errors. The puzzle resets..."}
+              The mechanism has locked up due to too many errors. The puzzle resets...
             </p>
           </div>
         </div>

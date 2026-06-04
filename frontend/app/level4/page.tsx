@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Timer from "@/components/Timer";
 import { useInventory } from "@/lib/InventoryContext";
 import CollectibleItem from "@/components/CollectibleItem";
 
@@ -275,7 +274,7 @@ export default function Level4Page() {
       `}</style>
 
       <div className="crypt-root">
-        {stage !== "complete" && !isGameOver && <Timer timeLeft={timeLeft} />}
+
 
         <header className="header">
           <p className="level-badge">Level IV · Escape Room</p>

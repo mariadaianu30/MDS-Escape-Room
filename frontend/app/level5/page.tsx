@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
+import { usePersistentState } from "@/lib/usePersistentState";
 import CollectibleItem from "@/components/CollectibleItem";
-import Timer from "@/components/Timer";
+import confetti from "canvas-confetti";
 
 const RELIC_LION = { id: "relic_lion", name: "Stone Lion", description: "The oldest relic stone, badly eroded around the lion seal.", iconSrc: "/images/relic_lion_aged_cutout.png" };
 const RELIC_CROSS = { id: "relic_cross", name: "Stone Cross", description: "An old cracked relic stone marked with a cross.", iconSrc: "/images/relic_cross_aged_cutout.png" };
@@ -69,22 +70,29 @@ const AltarImageOverlay = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
+type VictoryStats = {
+  elapsedSeconds: number;
+  remainingSeconds: number;
+  score: number;
+};
+
 export default function Level5Page() {
   const router = useRouter();
   const { items, addItem, removeItem, equippedItem, setEquippedItem } = useInventory();
 
   // Scene state
   const [view, setView] = useState<"main" | "levers" | "lever_clue" | "altar" | "chest_full" | "chest_dial">("main");
-  const [leverPositions, setLeverPositions] = useState<("u" | "d")[]>(["u", "u", "u"]);
-  const [leversSolved, setLeversSolved] = useState(false);
+  const [leverPositions, setLeverPositions] = usePersistentState<("u" | "d")[]>("escapeRoomLevel5LeverPositions", ["u", "u", "u"]);
+  const [leversSolved, setLeversSolved] = usePersistentState("escapeRoomLevel5LeversSolved", false);
   const [showNote, setShowNote] = useState(false);
-
+  
   // Rotation Puzzle State
-  const [ringRotations, setRingRotations] = useState<number[]>([120, 60, 240]);
-  const [chestOpen, setChestOpen] = useState(false);
-
-  const [altarSlots, setAltarSlots] = useState<(string | null)[]>([null, null, null, null]);
-  const [doorOpen, setDoorOpen] = useState(false);
+  const [ringRotations, setRingRotations] = usePersistentState<number[]>("escapeRoomLevel5RingRotations", [120, 60, 240]);
+  const [chestOpen, setChestOpen] = usePersistentState("escapeRoomLevel5ChestOpen", false);
+  
+  const [altarSlots, setAltarSlots] = usePersistentState<(string | null)[]>("escapeRoomLevel5AltarSlots", [null, null, null, null]);
+  const [doorOpen, setDoorOpen] = usePersistentState("escapeRoomLevel5DoorOpen", false);
+  const [victoryStats, setVictoryStats] = usePersistentState<VictoryStats | null>("escapeRoomVictoryStats", null);
   const [notification, setNotification] = useState<string | null>(null);
 
   const dialRef = useRef<HTMLDivElement>(null);
@@ -98,8 +106,16 @@ export default function Level5Page() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const formatTime = (seconds: number) => {
+    const safeSeconds = Math.max(0, seconds);
+    const minutes = Math.floor(safeSeconds / 60);
+    const rest = safeSeconds % 60;
+    return `${minutes}:${rest.toString().padStart(2, "0")}`;
+  };
+
   useEffect(() => {
     const interval = setInterval(() => {
+      if (victoryStats) return;
       const endTimeStr = localStorage.getItem("escapeRoomEndTime");
       if (!endTimeStr) return;
       const remaining = Math.max(0, Math.floor((parseInt(endTimeStr, 10) - Date.now()) / 1000));
@@ -110,7 +126,7 @@ export default function Level5Page() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [victoryStats]);
 
   const toggleLever = (index: number) => {
     if (leversSolved) return;
@@ -201,11 +217,93 @@ export default function Level5Page() {
   const currentLeverImage = `/images/levers_${leverPositions.join("")}.png`;
   const currentRoomImage = leversSolved ? "/images/level5_main_room_bg.png" : "/images/level5_levers_room_bg.png";
 
-  return (
-    <div className="relative w-full h-screen bg-black overflow-hidden font-cinzel select-none">
-      <Timer timeLeft={timeLeft} />
+  const completeEscapeRoom = () => {
+    const remainingSeconds = Math.max(0, timeLeft);
+    const elapsedSeconds = GAME_DURATION - remainingSeconds;
+    const score = Math.max(100, 1000 + remainingSeconds * 2);
+    const stats = { elapsedSeconds, remainingSeconds, score };
 
-      <div
+    localStorage.setItem("escapeRoomCompletedLevel", "5");
+    localStorage.setItem("escapeRoomVictoryStats", JSON.stringify(stats));
+    localStorage.removeItem("escapeRoomEndTime");
+    setVictoryStats(stats);
+
+    confetti({
+      particleCount: 220,
+      spread: 150,
+      origin: { y: 0.55 },
+      colors: ["#d4af37", "#ffffff", "#8b5e1a", "#f7e7a6"],
+    });
+  };
+
+  if (victoryStats) {
+    return (
+      <main className="relative min-h-screen overflow-hidden bg-black font-cinzel text-[#e5d8b3] flex items-center justify-center px-6">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-50"
+          style={{ backgroundImage: "url('/images/level5_main_bg.jpg')" }}
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(212,175,55,0.18),rgba(0,0,0,0.9)_65%)]" />
+
+        <section className="relative z-10 w-full max-w-3xl text-center border-y border-[#d4af37]/50 py-12">
+          <p className="text-[10px] md:text-xs tracking-[0.6em] uppercase text-[#d4af37]/70 mb-5">
+            The Final Door Has Opened
+          </p>
+          <h1 className="text-4xl md:text-6xl text-[#d4af37] tracking-[0.16em] drop-shadow-[0_0_30px_rgba(212,175,55,0.45)]">
+            You Escaped
+          </h1>
+          <p className="mt-6 font-serif text-lg md:text-xl italic text-[#cdbf9f] leading-relaxed">
+            The last mechanism falls silent behind you. The room keeps its secrets, but it no longer keeps you.
+          </p>
+
+          <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="border border-[#5c4026] bg-black/60 px-6 py-5">
+              <div className="text-[10px] tracking-[0.35em] uppercase text-[#8c7a6b]">Time</div>
+              <div className="mt-3 text-3xl text-[#d4af37]">{formatTime(victoryStats.elapsedSeconds)}</div>
+            </div>
+            <div className="border border-[#5c4026] bg-black/60 px-6 py-5">
+              <div className="text-[10px] tracking-[0.35em] uppercase text-[#8c7a6b]">Remaining</div>
+              <div className="mt-3 text-3xl text-[#d4af37]">{formatTime(victoryStats.remainingSeconds)}</div>
+            </div>
+            <div className="border border-[#5c4026] bg-black/60 px-6 py-5">
+              <div className="text-[10px] tracking-[0.35em] uppercase text-[#8c7a6b]">Score</div>
+              <div className="mt-3 text-3xl text-[#d4af37]">{victoryStats.score}</div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => router.push("/lobby")}
+            className="mt-10 px-8 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition-colors uppercase tracking-[0.3em] text-xs"
+          >
+            Return to Lobby
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (isGameOver) {
+    return (
+      <main className="min-h-screen bg-black font-cinzel text-[#d4af37] flex flex-col items-center justify-center text-center px-6">
+        <h1 className="text-4xl tracking-[0.2em] mb-6">Time Has Run Out</h1>
+        <p className="font-serif italic text-[#c7baaa] max-w-xl">
+          The chamber seals itself again. Return to the lobby and begin another attempt.
+        </p>
+        <button
+          onClick={() => router.push("/lobby?gameover=time")}
+          className="mt-10 px-8 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition-colors uppercase tracking-[0.3em] text-xs"
+        >
+          Return to Lobby
+        </button>
+      </main>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-screen bg-black overflow-hidden font-cinzel">
+
+      
+      <div 
         className="absolute inset-0 bg-cover bg-center transition-all duration-1000"
         style={{
           backgroundImage: `url('${currentRoomImage}')`,
@@ -234,7 +332,7 @@ export default function Level5Page() {
           />
           {doorOpen && (
             <div className="absolute left-[42%] top-[30%] w-[16%] h-[50%] flex items-center justify-center z-20">
-              <button onClick={() => router.push("/")} className="px-10 py-5 bg-yellow-700/60 text-white font-bold rounded shadow-[0_0_80px_rgba(255,215,0,0.4)] hover:bg-yellow-600 transition-all tracking-[0.6em] animate-pulse">EXIT</button>
+              <button onClick={completeEscapeRoom} className="px-10 py-5 bg-yellow-700/60 text-white font-bold rounded shadow-[0_0_80px_rgba(255,215,0,0.4)] hover:bg-yellow-600 transition-all tracking-[0.6em] animate-pulse">EXIT</button>
             </div>
           )}
           {!items.find(i => i.id === SPONGE_ITEM.id) && (
