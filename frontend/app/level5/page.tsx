@@ -74,7 +74,7 @@ export default function Level5Page() {
   const { items, addItem, removeItem, equippedItem, setEquippedItem } = useInventory();
 
   // Scene state
-  const [view, setView] = useState<"main" | "levers" | "altar" | "chest_full" | "chest_dial">("main");
+  const [view, setView] = useState<"main" | "levers" | "lever_clue" | "altar" | "chest_full" | "chest_dial">("main");
   const [leverPositions, setLeverPositions] = useState<("u" | "d")[]>(["u", "u", "u"]);
   const [leversSolved, setLeversSolved] = useState(false);
   const [showNote, setShowNote] = useState(false);
@@ -199,6 +199,7 @@ export default function Level5Page() {
   }, [altarSlots]);
 
   const currentLeverImage = `/images/levers_${leverPositions.join("")}.png`;
+  const currentRoomImage = leversSolved ? "/images/level5_main_room_bg.png" : "/images/level5_levers_room_bg.png";
 
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden font-cinzel select-none">
@@ -207,7 +208,7 @@ export default function Level5Page() {
       <div
         className="absolute inset-0 bg-cover bg-center transition-all duration-1000"
         style={{
-          backgroundImage: `url('/images/level5_${leversSolved ? "main" : "levers"}_bg.jpg')`,
+          backgroundImage: `url('${currentRoomImage}')`,
           filter: (view !== "main" || showNote) ? "blur(15px) brightness(0.2)" : "none",
         }}
       />
@@ -216,6 +217,21 @@ export default function Level5Page() {
         <>
           <button onClick={() => setView(leversSolved ? "chest_full" : "levers")} className="absolute left-[8%] top-[35%] w-[18%] h-[40%] z-10" />
           <button onClick={() => setView("altar")} className="absolute right-[8%] bottom-[8%] w-[25%] h-[40%] z-10" />
+          <div className="pointer-events-none absolute left-[55.2%] top-[32.8%] z-10 h-[17%] w-[12%]">
+            <div className="absolute inset-0 rounded-sm border border-stone-200/18 bg-stone-200/[0.045] shadow-[inset_0_0_24px_rgba(255,216,144,0.08),0_0_18px_rgba(255,190,92,0.08)]" />
+            <div className="absolute inset-[10%] rounded-sm border border-stone-100/10" />
+            <div className="absolute inset-x-[11%] top-[26%] grid grid-cols-3 items-center text-center font-serif text-[clamp(1.75rem,4vw,4.25rem)] font-bold leading-none text-stone-100/45 mix-blend-soft-light drop-shadow-[0_1px_1px_rgba(0,0,0,0.95)]">
+              <span className="translate-y-[12%]">{"\u2193"}</span>
+              <span className="-translate-y-[8%]">{"\u2191"}</span>
+              <span className="translate-y-[12%]">{"\u2193"}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setView("lever_clue")}
+            className="absolute left-[55%] top-[32.5%] z-20 h-[16%] w-[12%] cursor-pointer opacity-0"
+            aria-label="Inspect the wall clue"
+            title="Inspect wall clue"
+          />
           {doorOpen && (
             <div className="absolute left-[42%] top-[30%] w-[16%] h-[50%] flex items-center justify-center z-20">
               <button onClick={() => router.push("/")} className="px-10 py-5 bg-yellow-700/60 text-white font-bold rounded shadow-[0_0_80px_rgba(255,215,0,0.4)] hover:bg-yellow-600 transition-all tracking-[0.6em] animate-pulse">EXIT</button>
@@ -262,6 +278,39 @@ export default function Level5Page() {
               {[0, 1, 2].map(i => (
                 <div key={i} onClick={() => toggleLever(i)} className="w-[20%] h-full cursor-pointer z-20" />
               ))}
+            </div>
+            <BackButton onClick={() => setView("main")} />
+          </div>
+        </div>
+      )}
+
+      {view === "lever_clue" && (
+        <div className="absolute inset-0 z-50 bg-black">
+          <div className="contents">
+            <FullscreenSceneImage src="/images/level5_lever_clue_wall.png" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="grid w-[52vw] max-w-[840px] grid-cols-3 gap-[4vw] pt-[4vh] text-center font-serif text-[clamp(4rem,10vw,9rem)] font-bold leading-none text-stone-900/85 drop-shadow-[0_2px_0_rgba(255,232,178,0.3)]">
+                <span className="translate-y-[12%]">{"\u2193"}</span>
+                <span className="-translate-y-[8%]">{"\u2191"}</span>
+                <span className="translate-y-[12%]">{"\u2193"}</span>
+              </div>
+            </div>
+            <div
+              className="absolute bottom-[12%] right-[8%] z-[60] w-[min(360px,34vw)] rotate-2 px-8 py-7 text-center font-serif text-[clamp(0.85rem,1.45vw,1.05rem)] italic leading-relaxed text-[#2a1709] shadow-[0_18px_45px_rgba(0,0,0,0.7)]"
+              style={{
+                clipPath: "polygon(3% 6%, 15% 2%, 36% 5%, 58% 1%, 82% 4%, 97% 10%, 95% 38%, 100% 64%, 92% 96%, 64% 98%, 41% 95%, 17% 99%, 2% 88%, 0 56%, 4% 31%)",
+                backgroundColor: "#bb9052",
+                backgroundImage: "radial-gradient(circle at 18% 16%, rgba(255,229,154,0.5), transparent 22%), radial-gradient(circle at 86% 74%, rgba(71,37,13,0.42), transparent 30%), linear-gradient(135deg, rgba(255,244,190,0.18), transparent 42%, rgba(56,29,9,0.36))",
+              }}
+            >
+              <div className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-[#4a2a12]/80">Altar</div>
+              <p>
+                From the oldest stone to the newest,
+                <br />
+                set their fates in order.
+                <br />
+                The lion begins. The crown ends.
+              </p>
             </div>
             <BackButton onClick={() => setView("main")} />
           </div>
