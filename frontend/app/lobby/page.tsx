@@ -6,7 +6,7 @@ import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Lo
 import "../particles.css";
 import { createClient } from '@supabase/supabase-js'
 import { useAudio } from "@/lib/AudioContext"
-import { useInventory } from "@/lib/InventoryContext"
+import { useInventory, type PlayerRole } from "@/lib/InventoryContext"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,9 +34,15 @@ const LABELS = [
   "The Final Chamber"
 ];
 
+const PLAYER_ROLES: { id: PlayerRole; title: string; description: string }[] = [
+  { id: "scribe", title: "Scribe", description: "Sees written clues, wall text, and cipher notes." },
+  { id: "artisan", title: "Artisan", description: "Operates locks, input panels, and puzzle controls." },
+  { id: "oracle", title: "Oracle", description: "Can consult the AI spirit through the Eye." },
+];
+
 export default function IntroHome() {
   const router = useRouter();
-  const { roomCode, setRoomCode } = useInventory();
+  const { roomCode, setRoomCode, currentRole, setCurrentRole } = useInventory();
   const [showMultiplayer, setShowMultiplayer] = useState(false);
   const [inputRoomCode, setInputRoomCode] = useState("");
   
@@ -225,6 +231,11 @@ export default function IntroHome() {
     } else {
        router.push(`/level${level}`);
     }
+  };
+
+  const enterRoomWithRole = (code: string, role: PlayerRole) => {
+    setRoomCode(code);
+    setCurrentRole(role);
   };
 
   return (
@@ -605,8 +616,8 @@ export default function IntroHome() {
 
       {/* 6. Multiplayer Modal overlay */}
       {showMultiplayer && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
-            <div className="relative max-w-xl w-full mx-auto bg-[#150e09] border-[3px] border-[#d4af37] p-10 md:p-14 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] font-cinzel">
+         <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/95 px-4 py-6 backdrop-blur-md animate-in fade-in duration-300 md:py-10">
+            <div className="relative max-h-[calc(100dvh-3rem)] max-w-xl w-full mx-auto overflow-y-auto bg-[#150e09] border-[3px] border-[#d4af37] p-7 md:p-10 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] font-cinzel">
                
                <button 
                   onClick={() => setShowMultiplayer(false)}
@@ -631,6 +642,34 @@ export default function IntroHome() {
                         <p className="text-lg font-cormorant italic text-[#a89f91] px-4 leading-relaxed">
                            "Your inventory and progression are now bound to all players inside this specific chamber. Items gathered will instantly synchronise."
                         </p>
+                        <div className="rounded-xl border border-[#5c4026]/70 bg-black/35 p-5 text-left">
+                           <p className="mb-4 text-center text-xs uppercase tracking-[0.28em] text-[#d4af37]">Role Assignment</p>
+                           <div className="grid grid-cols-1 gap-3">
+                              {PLAYER_ROLES.map((role) => (
+                                 <button
+                                    key={role.id}
+                                    onClick={() => setCurrentRole(role.id)}
+                                    className={`rounded-lg border px-4 py-3 text-left transition-all ${
+                                       currentRole === role.id
+                                          ? "border-[#d4af37] bg-[#d4af37]/15 text-[#f7e7a6] shadow-[0_0_22px_rgba(212,175,55,0.18)]"
+                                          : "border-[#5c4026]/70 bg-black/35 text-[#c7baaa] hover:border-[#d4af37]/70"
+                                    }`}
+                                 >
+                                    <div className="flex items-center justify-between gap-3">
+                                       <span className="font-cinzel text-sm uppercase tracking-[0.22em]">{role.title}</span>
+                                       {currentRole === role.id && <span className="text-[10px] uppercase tracking-[0.2em] text-[#d4af37]">Active</span>}
+                                    </div>
+                                    <p className="mt-1 font-cormorant text-sm italic leading-relaxed text-[#8c7a6b]">{role.description}</p>
+                                 </button>
+                              ))}
+                           </div>
+                        </div>
+                        <button
+                           onClick={() => setShowMultiplayer(false)}
+                           className="w-full py-4 px-6 bg-gradient-to-r from-[#d4af37] to-[#b08d57] text-black hover:brightness-110 rounded-lg tracking-widest font-bold transition-all uppercase shadow-[0_0_30px_rgba(212,175,55,0.22)] duration-300"
+                        >
+                           Continue to Lobby
+                        </button>
                         <button
                            onClick={() => {
                               setRoomCode(null);
@@ -649,7 +688,7 @@ export default function IntroHome() {
                               onClick={() => {
                                  // Generate random 6-character room code
                                  const generatedCode = "ESC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-                                 setRoomCode(generatedCode);
+                                 enterRoomWithRole(generatedCode, "scribe");
                               }}
                               className="w-full py-4 px-6 bg-gradient-to-r from-[#d4af37] to-[#b08d57] text-black hover:brightness-110 rounded-lg tracking-widest font-bold transition-all uppercase shadow-[0_0_35px_rgba(212,175,55,0.3)] duration-300"
                            >
@@ -676,7 +715,7 @@ export default function IntroHome() {
                               <button
                                  onClick={() => {
                                     if (inputRoomCode.trim()) {
-                                       setRoomCode(inputRoomCode.trim());
+                                       enterRoomWithRole(inputRoomCode.trim(), "artisan");
                                        setInputRoomCode("");
                                     }
                                  }}

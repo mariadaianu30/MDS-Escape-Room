@@ -8,6 +8,8 @@ import Timer from "@/components/Timer";
 import CollectibleItem from "@/components/CollectibleItem";
 import confetti from "canvas-confetti";
 import { useInventory } from "@/lib/InventoryContext";
+import { InspectionNarrator } from "@/components/InspectionNarrator";
+import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -20,6 +22,7 @@ const GAME_DURATION = 30 * 60;
 export default function Level1() {
   const router = useRouter();
   const { hasItem, items, equippedItem, setEquippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const { isArtisan, isScribe } = useRoleAccess();
   const hasCompass = hasItem("brass_compass_lvl1");
   const hasEraser = hasItem("chalk_eraser_lvl1");
   const [gameId, setGameId] = useState(0);
@@ -203,6 +206,13 @@ export default function Level1() {
       {/* Timer is now rendered in layout.tsx globally */}
 
       <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-12 md:gap-24 overflow-hidden mt-6">
+        <InspectionNarrator
+          objects={[
+            { id: "library", label: "Library Shelves", level: 1 },
+            { id: "blackboard", label: "Dusty Blackboard", level: 1, state: { cleaned: isBlackboardCleaned } },
+            { id: "rusted_lock", label: "Rusted Door Lock", level: 1, state: { unjammed: isLockUnjammed } },
+          ]}
+        />
 
         {/* Central Desk Area - Sudoku */}
         <div className="flex flex-col items-center justify-center w-full max-w-xl xl:max-w-2xl relative shrink-0 translate-x-6 md:translate-x-12 xl:translate-x-20 z-20">
@@ -237,11 +247,16 @@ export default function Level1() {
                  <div 
                    className="w-full h-full bg-[#050505] relative overflow-hidden transition-all duration-1000 shadow-[inset_0_5px_40px_rgba(0,0,0,1)] border border-black/90 brightness-50 contrast-[0.80] sepia-[0.3] opacity-80"
                    style={{
-                     backgroundImage: `url(${isBlackboardCleaned ? '/images/slate_clean.png' : '/images/slate_dirty.png'})`,
+                   backgroundImage: `url(${isBlackboardCleaned ? '/images/slate_clean.png' : '/images/slate_dirty.png'})`,
                      backgroundSize: 'cover',
                      backgroundPosition: 'center',
                    }}
                  ></div>
+                 {isBlackboardCleaned && !isScribe && (
+                   <div className="absolute inset-[14px] md:inset-[18px] z-20 flex items-center justify-center bg-black/70 p-4 text-center font-cinzel text-[10px] uppercase tracking-[0.22em] text-[#8c7a6b]">
+                     The writing is legible only to the Scribe.
+                   </div>
+                 )}
                  
                  {/* Subtle Bottom Ledge */}
                  <div className="absolute bottom-[2px] left-[6px] right-[6px] h-2 bg-gradient-to-b from-[#3a2618] to-[#120a06] rounded-sm shadow-[0_5px_10px_rgba(0,0,0,0.8)] border-t border-[#4a3220] z-20 opacity-80 mt-1 pointer-events-none"></div>
@@ -277,10 +292,15 @@ export default function Level1() {
 
             <div className={`transition-opacity duration-1000 ${isUnlocked ? 'opacity-0' : 'opacity-100'} relative`}>
                <div onClick={handleLockClick} className={`transition-all duration-700 ${!isLockUnjammed ? "opacity-60 blur-sm brightness-50 cursor-pointer" : ""}`}>
-                 <div className={!isLockUnjammed ? "pointer-events-none" : ""}>
+                 <div className={`${!isLockUnjammed || !isArtisan ? "pointer-events-none" : ""}`}>
                     <CombinationLock key={`lock-${gameId}`} onUnlock={handleDoorUnlocked} correctCode={extractedCode || "0000"} />
                  </div>
                </div>
+               {isLockUnjammed && !isArtisan && (
+                 <div className="absolute left-1/2 top-[58%] z-30 w-64 -translate-x-1/2">
+                   <RoleBlockedNotice role="artisan" label="Only the Artisan can operate the lock." />
+                 </div>
+               )}
                
               
               {/* Compass near the door lock */}

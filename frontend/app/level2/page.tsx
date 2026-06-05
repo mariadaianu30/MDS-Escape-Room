@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { GameStage, BlankId, FragmentWord, PipeType, PipeCell } from "@/types/level2";
 import CollectibleItem from "@/components/CollectibleItem";
 import { useInventory } from "@/lib/InventoryContext";
+import { InspectionNarrator } from "@/components/InspectionNarrator";
+import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 
 // ----------------------------------------------------------------------------
 // STAGE 0: INTRO CONSTANTS
@@ -71,6 +73,7 @@ export default function Level2() {
   const [stage, setStage] = useState<GameStage | 'hidden_objects'>('intro');
   const [fadeState, setFadeState] = useState<'in' | 'out'>('in');
   const { items, equippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const { isArtisan, isScribe } = useRoleAccess();
 
   // --- STAGE 0 STATE ---
   const [lineIndex, setLineIndex] = useState(0);
@@ -490,6 +493,13 @@ export default function Level2() {
     return (
       <main className={`min-h-screen bg-[#0d0a14] transition-opacity duration-800 ${fadeState==='in'?'opacity-100':'opacity-0'} p-6 flex flex-col`}>
         <LevelHeader />
+        <InspectionNarrator
+          objects={[
+            { id: "alchemy_lab", label: "Alchemist's Bench", level: 2 },
+            { id: "sealed_journal", label: "Sealed Journal", level: 2, state: { stage } },
+            { id: "alchemy_pipes", label: "Pipe Apparatus", level: 2, state: { unlocked: isDoorUnlocked } },
+          ]}
+        />
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-8 mt-4 w-full">
           
           {/* LEFT: JOURNALS */}
@@ -545,18 +555,19 @@ export default function Level2() {
                 
                 <div className="mb-4">
                   I. 'I am born in the belly of stars and die in the palm of kings. The Sun wears me as a crown. The Moon borrows my reflection to seem worthy. Alchemists chase me for a lifetime and find me only when they stop looking. What element am I?' — write the symbol, not the name.
-                  <input type="text" value={riddle1} onChange={e => { setRiddle1(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle1: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
+                  <input type="text" value={riddle1} disabled={!isArtisan} onChange={e => { setRiddle1(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle1: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04] disabled:cursor-not-allowed disabled:opacity-45" />
                 </div>
                 <div className="mb-4">
                   II. The Moon's sacred metal, rearranged by a mad scholar. Unscramble the letters to find the element that rules tides and dreams: V I L R E S.
-                  <input type="text" value={riddle2} onChange={e => { setRiddle2(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle2: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
+                  <input type="text" value={riddle2} disabled={!isArtisan} onChange={e => { setRiddle2(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle2: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04] disabled:cursor-not-allowed disabled:opacity-45" />
                 </div>
                 <div className="mb-4">
                   III. Decode this: GLVWLOO<br/>
                   (Caesar shift: each letter moved forward by III — the trinity again). This word is the Third Gate's true name.
-                  <input type="text" value={riddle3} onChange={e => { setRiddle3(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle3: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04]" />
+                  <input type="text" value={riddle3} disabled={!isArtisan} onChange={e => { setRiddle3(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle3: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04] disabled:cursor-not-allowed disabled:opacity-45" />
                 </div>
 
+                {isScribe ? (
                 <div className="mt-6 text-sm">
                   <button onClick={() => setShowHint(!showHint)} className="text-[#9a6018] hover:underline">
                     ☽ reveal one hint
@@ -569,12 +580,15 @@ export default function Level2() {
                     </div>
                   )}
                 </div>
+                ) : (
+                  <RoleBlockedNotice role="scribe" label="The marginal hints are visible only to the Scribe." />
+                )}
               </div>
             </div>
 
             <div className="text-center mt-4 h-16">
               {filled.b1 && filled.b2 && filled.b3 && riddle1 && riddle2 && riddle3 && !jFeedback && (
-                <button onClick={validateJournal} className="font-cinzel bg-[#1a0e04] border border-[#7a5010] text-[#c8922a] px-8 py-3 w-full max-w-md hover:bg-[#c8922a] hover:text-[#1a0e04] transition-colors">
+                <button onClick={validateJournal} disabled={!isArtisan} className="font-cinzel bg-[#1a0e04] border border-[#7a5010] text-[#c8922a] px-8 py-3 w-full max-w-md hover:bg-[#c8922a] hover:text-[#1a0e04] transition-colors disabled:cursor-not-allowed disabled:opacity-45">
                   ⚗ Attempt the Great Work
                 </button>
               )}
@@ -596,7 +610,7 @@ export default function Level2() {
                      onClick={() => { if(!used) setSelectedFrag(f.word); }}
                      className={`bg-[#e2c88a] border ${sel ? 'border-[#d4af37] shadow-[0_0_8px_#d4af37]' : 'border-[#b89040]'} p-2 text-center transition-all ${used ? 'opacity-30 pointer-events-none' : 'cursor-grab hover:-translate-y-1'}`}>
                   <div className="font-cinzel text-[12px] font-bold text-[#1e0e04]">{f.word.toUpperCase()}</div>
-                  <div className="font-cormorant italic text-[11px] text-[#5c4427]">{f.hint}</div>
+                  {isScribe && <div className="font-cormorant italic text-[11px] text-[#5c4427]">{f.hint}</div>}
                 </div>
               )
             })}
