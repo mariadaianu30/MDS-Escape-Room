@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
 import CollectibleItem from "@/components/CollectibleItem";
+import { InspectionNarrator } from "@/components/InspectionNarrator";
+import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import confetti from "canvas-confetti";
 
 const RELIC_LION = { id: "relic_lion", name: "Stone Lion", description: "The oldest relic stone, badly eroded around the lion seal.", iconSrc: "/images/relic_lion_aged_cutout.png" };
@@ -151,6 +153,7 @@ type VictoryStats = {
 export default function Level5Page() {
   const router = useRouter();
   const { items, addItem, removeItem, equippedItem, setEquippedItem } = useInventory();
+  const { isArtisan, isScribe } = useRoleAccess();
   const initialRingRotations = useRef(getRandomRingRotations());
 
   // Scene state
@@ -240,6 +243,10 @@ export default function Level5Page() {
 
   const handleDialClick = (e: React.MouseEvent) => {
     if (chestOpen || !dialRef.current) return;
+    if (!isArtisan) {
+      showNotification("Only the Artisan can rotate the rings.");
+      return;
+    }
     const rect = dialRef.current.getBoundingClientRect();
     const diameter = Math.min(rect.width, rect.height);
     const centerX = rect.left + rect.width / 2;
@@ -442,6 +449,13 @@ export default function Level5Page() {
       <div className="level5-main-vignette absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_44%,transparent_0%,rgba(0,0,0,0.24)_46%,rgba(0,0,0,0.72)_100%)]" />
       <div className="level5-main-topshade absolute inset-x-0 top-0 h-32 pointer-events-none bg-gradient-to-b from-black/70 to-transparent" />
       <div className="level5-main-bottomshade absolute inset-x-0 bottom-0 h-48 pointer-events-none bg-gradient-to-t from-black/80 to-transparent" />
+      <InspectionNarrator
+        objects={[
+          { id: "final_chamber", label: "Final Chamber", level: 5, state: { leversSolved, chestOpen } },
+          { id: "lever_mechanism", label: "Lever Mechanism", level: 5, state: { solved: leversSolved } },
+          { id: "sealed_reliquary", label: "Sealed Reliquary", level: 5, state: { open: chestOpen } },
+        ]}
+      />
 
       {view === "main" && !showNote && (
         <>
@@ -460,11 +474,13 @@ export default function Level5Page() {
             className="level5-hotspot-altar right-[6%] bottom-[6%] h-[43%] w-[29%]"
             label="Approach the altar"
           />
-          <Hotspot
-            onClick={() => setView("lever_clue")}
-            className="level5-hotspot-tablet left-[72%] top-[16%] h-[29%] w-[17%]"
-            label="Inspect the carved tablet"
-          />
+          {isScribe && (
+            <Hotspot
+              onClick={() => setView("lever_clue")}
+              className="level5-hotspot-tablet left-[72%] top-[16%] h-[29%] w-[17%]"
+              label="Inspect the carved tablet"
+            />
+          )}
           {doorOpen && (
             <div className="absolute left-[40%] top-[27%] z-40 flex h-[52%] w-[20%] items-center justify-center">
               <button onClick={completeEscapeRoom} className="rounded-full border border-[#f6d77b]/60 bg-black/55 px-10 py-5 text-[#f6d77b] shadow-[0_0_80px_rgba(255,215,0,0.35),inset_0_0_24px_rgba(212,175,55,0.12)] backdrop-blur transition-all hover:bg-[#d4af37] hover:text-black tracking-[0.45em] animate-pulse">EXIT</button>
@@ -525,10 +541,15 @@ export default function Level5Page() {
                   key={i}
                   index={i}
                   state={position}
-                  onToggle={() => toggleLever(i)}
+                  onToggle={() => isArtisan ? toggleLever(i) : showNotification("Only the Artisan can move the levers.")}
                 />
               ))}
             </div>
+            {!isArtisan && (
+              <div className="absolute bottom-24 left-1/2 z-[90] w-[min(420px,80vw)] -translate-x-1/2">
+                <RoleBlockedNotice role="artisan" label="Only the Artisan can move the levers." />
+              </div>
+            )}
           </section>
         </div>
       )}
@@ -713,10 +734,14 @@ export default function Level5Page() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              rotateRing(index);
+                              if (isArtisan) {
+                                rotateRing(index);
+                              } else {
+                                showNotification("Only the Artisan can rotate the rings.");
+                              }
                             }}
                             className="rounded-full border border-[#d4af37]/35 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[#d4af37] transition hover:border-[#d4af37] hover:bg-[#d4af37]/10 disabled:opacity-40"
-                            disabled={ringStatuses[index]}
+                            disabled={ringStatuses[index] || !isArtisan}
                           >
                             Turn
                           </button>

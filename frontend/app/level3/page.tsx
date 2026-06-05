@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
 import CollectibleItem from "@/components/CollectibleItem";
+import { InspectionNarrator } from "@/components/InspectionNarrator";
+import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import confetti from "canvas-confetti";
 
 const GAME_DURATION = 30 * 60;
@@ -274,6 +276,7 @@ function ConstellationBoard({
 export default function Level3() {
   const router = useRouter();
   const { removeItem, equippedItem, setEquippedItem, items } = useInventory();
+  const { isArtisan, isScribe } = useRoleAccess();
 
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [isGameOver, setIsGameOver] = useState(false);
@@ -414,6 +417,13 @@ export default function Level3() {
       <div className="fixed inset-x-0 bottom-0 h-32 z-[3] bg-gradient-to-t from-[#02050f] via-[#02050f]/70 to-transparent pointer-events-none" />
       <div className="fixed inset-x-0 top-24 h-px z-[3] bg-gradient-to-r from-transparent via-[#6b9fd4]/25 to-transparent pointer-events-none" />
       <TwinklingStars />
+      <InspectionNarrator
+        objects={[
+          { id: "observatory", label: "Astronomer's Tower", level: 3 },
+          { id: "telescope", label: "Brass Telescope", level: 3, state: { lensInserted } },
+          { id: "star_map", label: "Celestial Sphere", level: 3, state: { activeConstellation } },
+        ]}
+      />
       <ShootingComet />
 
       {/* Title — moved slightly lower to clear inventory overlap */}
@@ -449,9 +459,13 @@ export default function Level3() {
           {/* Clue scroll */}
           <div className="bg-[#0a0e1a]/75 border border-[#d4af37]/35 rounded-lg p-5 md:p-6 shadow-[0_0_34px_rgba(212,175,55,0.1)] bg-[url('https://www.transparenttextures.com/patterns/parchment.png')]">
             <h2 className="font-cinzel text-[#d4af37] text-[11px] tracking-[0.4em] uppercase mb-2">Ancient Scroll</h2>
-            <p className="text-lg md:text-2xl text-[#e5d8b3] italic leading-tight font-medium">
-              "{CORRECT_CONSTELLATION.clue}"
-            </p>
+            {isScribe ? (
+              <p className="text-lg md:text-2xl text-[#e5d8b3] italic leading-tight font-medium">
+                "{CORRECT_CONSTELLATION.clue}"
+              </p>
+            ) : (
+              <RoleBlockedNotice role="scribe" label="The scroll's writing is visible only to the Scribe." />
+            )}
           </div>
 
           {/* Telescope */}
@@ -522,21 +536,22 @@ export default function Level3() {
               return (
                 <div key={con.id} className="flex flex-col gap-2">
                   <button
-                    onClick={() => lensInserted && setActiveConstellation(activeConstellation === con.id ? null : con.id)}
+                    onClick={() => lensInserted && isArtisan && setActiveConstellation(activeConstellation === con.id ? null : con.id)}
                     className={`font-cinzel text-xs tracking-widest uppercase py-2 px-4 rounded-lg border transition-all duration-300
                       ${activeConstellation === con.id
                         ? "border-[#6b9fd4] bg-[#0a1828] text-[#b8d4f0] shadow-[0_0_15px_rgba(107,159,212,0.3)]"
                         : "border-[#1e3550]/50 bg-black/30 text-[#6b9fd4]/50 hover:border-[#2b5070] hover:text-[#8aa1b8]"}
                     `}
-                    disabled={!lensInserted}
+                    disabled={!lensInserted || !isArtisan}
                   >
                     {con.name}
                   </button>
+                  {!isArtisan && lensInserted && <RoleBlockedNotice role="artisan" label="Only the Artisan can trace the stars." />}
 
                   <div style={isWinning ? { animation: 'constellation-glow 2s ease-in-out infinite' } : {}}>
                     <ConstellationBoard
                       constellation={con}
-                      active={activeConstellation === con.id}
+                      active={isArtisan && activeConstellation === con.id}
                       solvedConnections={solvedConnections[con.id] || []}
                       wrongFlash={wrongFlash && activeConstellation === con.id}
                       onConnectionMade={(isCorrect, pair) => handleConnectionMade(con.id, isCorrect, pair)}

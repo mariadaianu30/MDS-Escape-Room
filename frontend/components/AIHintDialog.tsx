@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { X, Send, Eye } from "lucide-react";
+import { useRoleAccess } from "@/components/RoleGate";
 
 interface Message {
   role: "user" | "spirit";
@@ -10,6 +11,7 @@ interface Message {
 }
 
 export default function AIHintDialog() {
+  const { isOracle } = useRoleAccess();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: "spirit", content: "I am the spirit of the library... what do you seek?" }
@@ -29,6 +31,7 @@ export default function AIHintDialog() {
 
   // Hide on lobby or root
   if (!pathname || !pathname.startsWith('/level')) return null;
+  if (!isOracle) return null;
 
   const currentLevel = parseInt(pathname.match(/level(\d+)/)?.[1] || "1", 10);
   const currentPuzzleId = `level${currentLevel}_general`;
