@@ -18,6 +18,8 @@ interface SudokuGridProps {
   disabledMessage?: string;
   onCorrectMove?: (move: { row: number; col: number; value: number; grid: Grid }) => void;
   onMistake?: (move: { row: number; col: number; value: number; mistakes: number }) => void;
+  onCellUpdate?: (row: number, col: number, value: number) => void;
+  remoteUpdates?: Array<{ row: number; col: number; value: number; username: string }>;
 }
 
 const cloneGrid = (grid: Grid) => grid.map((row) => [...row]);
@@ -45,6 +47,8 @@ export default function SudokuGrid({
   disabledMessage = "Only the Artisan can write in the cipher grid.",
   onCorrectMove,
   onMistake,
+  onCellUpdate,
+  remoteUpdates = [],
 }: SudokuGridProps) {
   const [initialGrid, setInitialGrid] = useState<Grid | null>(null);
   const [internalUserGrid, setInternalUserGrid] = useState<Grid | null>(null);
@@ -56,6 +60,7 @@ export default function SudokuGrid({
   
   const [flashCell, setFlashCell] = useState<{r: number, c: number, type: 'red' | 'green'} | null>(null);
   const [internalIsCompleted, setInternalIsCompleted] = useState(false);
+  const [remoteFlash, setRemoteFlash] = useState<{r: number, c: number, username: string} | null>(null);
 
   const userGrid = controlledUserGrid ?? internalUserGrid;
   const mistakes = controlledMistakes ?? internalMistakes;
@@ -85,6 +90,14 @@ export default function SudokuGrid({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [puzzle, solution]);
 
+  // Handle remote updates from other players
+  useEffect(() => {
+    if (remoteUpdates.length === 0) return;
+    const lastUpdate = remoteUpdates[remoteUpdates.length - 1];
+    setRemoteFlash({ r: lastUpdate.row, c: lastUpdate.col, username: lastUpdate.username });
+    setTimeout(() => setRemoteFlash(null), 1000);
+  }, [remoteUpdates]);
+
   const handleNumberClick = (num: number) => {
     if (disabled || !selectedCell || !userGrid || !solutionGrid || isCompleted) return;
     const [r, c] = selectedCell;
@@ -104,6 +117,9 @@ export default function SudokuGrid({
         setInternalUserGrid(newGrid);
         onCorrectMove?.({ row: r, col: c, value: num, grid: newGrid });
       }
+      
+      // Broadcast to other players
+      onCellUpdate?.(r, c, num);
       
       setFlashCell({ r, c, type: 'green' });
       setTimeout(() => setFlashCell(null), 500);
@@ -179,6 +195,7 @@ export default function SudokuGrid({
             const isCenterBox = r >= 3 && r <= 5 && c >= 3 && c <= 5;
             const isFlashRed = flashCell?.r === r && flashCell?.c === c && flashCell?.type === 'red';
             const isFlashGreen = flashCell?.r === r && flashCell?.c === c && flashCell?.type === 'green';
+            const isRemoteFlash = remoteFlash?.r === r && remoteFlash?.c === c;
             const isHoverMatch = hoveredNum !== null && val === hoveredNum;
             
             // Highlight the exact cell correctly based on logic
@@ -193,6 +210,7 @@ export default function SudokuGrid({
 
             if (isFlashRed) bgClass = "bg-red-800 transition-colors duration-150";
             if (isFlashGreen) bgClass = "bg-green-800 transition-colors duration-150";
+            if (isRemoteFlash) bgClass = "bg-blue-900 animate-pulse transition-colors duration-300";
 
             let textClass = isInitial ? "text-[#8c7a6b]" : "text-[#d4af37]";
 

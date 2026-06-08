@@ -73,7 +73,7 @@ export default function Level2() {
   
   const [stage, setStage] = useState<GameStage | 'hidden_objects'>('intro');
   const [fadeState, setFadeState] = useState<'in' | 'out'>('in');
-  const { items, equippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const { items, equippedItem, removeItem, onRoomEvent, broadcastRoomEvent, roomCode } = useInventory();
   const { isArtisan, isScribe } = useRoleAccess();
 
   // --- STAGE 0 STATE ---
@@ -216,6 +216,47 @@ export default function Level2() {
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
   }, []);
+
+  // Load state from localStorage on mount/roomCode change
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl2_${roomCode}` : `escapeRoomState_lvl2_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.stage) setStage(parsed.stage);
+        if (typeof parsed.lineIndex === "number") setLineIndex(parsed.lineIndex);
+        if (Array.isArray(parsed.foundObjects)) setFoundObjects(parsed.foundObjects);
+        if (typeof parsed.keySpawned === "boolean") setKeySpawned(parsed.keySpawned);
+        if (typeof parsed.isDoorUnlocked === "boolean") setIsDoorUnlocked(parsed.isDoorUnlocked);
+        if (parsed.filled) setFilled(parsed.filled);
+        if (typeof parsed.riddle1 === "string") setRiddle1(parsed.riddle1);
+        if (typeof parsed.riddle2 === "string") setRiddle2(parsed.riddle2);
+        if (typeof parsed.riddle3 === "string") setRiddle3(parsed.riddle3);
+        if (Array.isArray(parsed.grid)) setGrid(parsed.grid);
+      } catch (e) {
+        console.error("Failed to load saved level2 state", e);
+      }
+    }
+  }, [roomCode]);
+
+  // Save Level 2 state to localStorage when any state variable changes
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl2_${roomCode}` : `escapeRoomState_lvl2_single`;
+    const stateToSave = {
+      stage,
+      lineIndex,
+      foundObjects,
+      keySpawned,
+      isDoorUnlocked,
+      filled,
+      riddle1,
+      riddle2,
+      riddle3,
+      grid
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [stage, lineIndex, foundObjects, keySpawned, isDoorUnlocked, filled, riddle1, riddle2, riddle3, grid, roomCode]);
 
   // --- STAGE TRANSITION HELPER ---
   const advanceTo = (newStage: GameStage | 'hidden_objects', fromRemote = false) => {
@@ -706,6 +747,8 @@ export default function Level2() {
             const completed = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
             if (completed < 2) localStorage.setItem("escapeRoomCompletedLevel", "2");
             await saveAccountProgress(3);
+            const key = roomCode ? `escapeRoomState_lvl2_${roomCode}` : `escapeRoomState_lvl2_single`;
+            localStorage.removeItem(key);
             router.push('/level3');
           }}
           className="mt-12 font-cinzel px-8 py-3 border border-[#d4a017] text-[#d4a017] hover:bg-[#d4a017] hover:text-black transition-colors uppercase tracking-widest">

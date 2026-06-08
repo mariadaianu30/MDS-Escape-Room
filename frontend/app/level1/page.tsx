@@ -13,6 +13,7 @@ import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import { createClient } from '@supabase/supabase-js'
 import { saveAccountProgress } from "@/lib/progress";
 import { generateSudoku } from "@/lib/sudoku";
+import { useRealtimeSudoku } from "@/lib/useRealtimeSudoku";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,8 +44,18 @@ export default function Level1() {
   const [sudokuUserGrid, setSudokuUserGrid] = useState<SudokuGridState | null>(null);
   const [sudokuMistakes, setSudokuMistakes] = useState(0);
   const [isSudokuCompleted, setIsSudokuCompleted] = useState(false);
+  const [remoteUpdates, setRemoteUpdates] = useState<Array<{ row: number; col: number; value: number; username: string }>>([]);
   const latestStateRef = useRef<any>(null);
   const latestSudokuGridRef = useRef<SudokuGridState | null>(null);
+
+  // Real-time sudoku sync hook
+  const { broadcastSudokuUpdate } = useRealtimeSudoku(
+    roomCode,
+    1,
+    (update) => {
+      setRemoteUpdates((prev) => [...prev, update]);
+    }
+  );
   
   const showNotification = (msg: string) => {
     setNotification(msg);
@@ -52,11 +63,50 @@ export default function Level1() {
   };
 
   useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.isBlackboardCleaned === "boolean") setIsBlackboardCleaned(parsed.isBlackboardCleaned);
+        if (typeof parsed.isLockUnjammed === "boolean") setIsLockUnjammed(parsed.isLockUnjammed);
+        if (typeof parsed.isUnlocked === "boolean") setIsUnlocked(parsed.isUnlocked);
+        if (typeof parsed.extractedCode === "string" || parsed.extractedCode === null) setExtractedCode(parsed.extractedCode);
+        if (Array.isArray(parsed.sudokuUserGrid)) {
+          setSudokuUserGrid(parsed.sudokuUserGrid);
+          latestSudokuGridRef.current = parsed.sudokuUserGrid;
+        }
+        if (typeof parsed.sudokuMistakes === "number") setSudokuMistakes(parsed.sudokuMistakes);
+        if (typeof parsed.isSudokuCompleted === "boolean") setIsSudokuCompleted(parsed.isSudokuCompleted);
+        return;
+      } catch (e) {
+        console.error("Failed to parse level 1 state", e);
+      }
+    }
+
     setSudokuUserGrid(cloneGrid(sharedSudoku.puzzle));
     latestSudokuGridRef.current = cloneGrid(sharedSudoku.puzzle);
     setSudokuMistakes(0);
     setIsSudokuCompleted(false);
-  }, [sharedSudoku]);
+    setIsBlackboardCleaned(false);
+    setIsLockUnjammed(false);
+    setIsUnlocked(false);
+    setExtractedCode(null);
+  }, [sharedSudoku, roomCode]);
+
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    const stateToSave = {
+      isBlackboardCleaned,
+      isLockUnjammed,
+      isUnlocked,
+      extractedCode,
+      sudokuUserGrid,
+      sudokuMistakes,
+      isSudokuCompleted
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted, roomCode]);
 
   useEffect(() => {
     latestStateRef.current = {
@@ -260,6 +310,9 @@ export default function Level1() {
     }
     await saveAccountProgress(2);
 
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    localStorage.removeItem(key);
+
     broadcastRoomEvent("DOOR_UNLOCKED", { code: extractedCode || "7391" });
 
 
@@ -294,6 +347,8 @@ export default function Level1() {
       broadcastRoomEvent("SUDOKU_RESET_LVL1", {});
     }
     setGameId((prev) => prev + 1);
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    localStorage.removeItem(key);
   };
 
   const formatElapsed = (seconds: number) => {
@@ -314,6 +369,8 @@ export default function Level1() {
         className="fixed inset-0 z-0 opacity-40 mix-blend-screen bg-cover bg-center"
         style={{ backgroundImage: 'url(/images/library.png)' }}
       />
+
+
 
       {/* Top Header with Save & Exit */}
       <div className="absolute top-4 left-4 z-50">
@@ -377,6 +434,13 @@ export default function Level1() {
                 onMistake={handleSudokuMistake}
                 onSolved={handleSudokuSolved}
                 onGameOver={handleMistakesGameOver}
+                onCellUpdate={(row, col, value) => {
+                  // Broadcast sudoku update to other players in room
+                  if (roomCode) {
+                    broadcastSudokuUpdate(row, col, value);
+                  }
+                }}
+                remoteUpdates={remoteUpdates}
               />
             </div>
           </div>

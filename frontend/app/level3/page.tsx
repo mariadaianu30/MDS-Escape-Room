@@ -276,7 +276,7 @@ function ConstellationBoard({
 // ─── Main Level 3 ─────────────────────────────────────────────────────────────
 export default function Level3() {
   const router = useRouter();
-  const { removeItem, equippedItem, setEquippedItem, items } = useInventory();
+  const { removeItem, equippedItem, setEquippedItem, items, roomCode } = useInventory();
   const { isArtisan, isScribe } = useRoleAccess();
 
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
@@ -297,6 +297,35 @@ export default function Level3() {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
   };
+
+  // Load state from localStorage on mount/roomCode change
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.lensInserted === "boolean") setLensInserted(parsed.lensInserted);
+        if (typeof parsed.activeConstellation === "string" || parsed.activeConstellation === null) setActiveConstellation(parsed.activeConstellation);
+        if (parsed.solvedConnections) setSolvedConnections(parsed.solvedConnections);
+        if (typeof parsed.wrongPicks === "number") setWrongPicks(parsed.wrongPicks);
+      } catch (e) {
+        console.error("Failed to load saved level3 state", e);
+      }
+    }
+  }, [roomCode]);
+
+  // Save Level 3 state to localStorage when any state changes
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+    const stateToSave = {
+      lensInserted,
+      activeConstellation,
+      solvedConnections,
+      wrongPicks
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [lensInserted, activeConstellation, solvedConnections, wrongPicks, roomCode]);
 
   useEffect(() => {
     const endTimeStr = localStorage.getItem("escapeRoomEndTime");
@@ -379,6 +408,8 @@ export default function Level3() {
         const savedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
         if (savedLevel < 3) localStorage.setItem("escapeRoomCompletedLevel", "3");
         void saveAccountProgress(4);
+        const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+        localStorage.removeItem(key);
         confetti({ particleCount: 200, spread: 160, origin: { y: 0.5 }, colors: ["#b8d4f0", "#d4af37", "#ffffff"] });
         setTimeout(() => setShowLevelComplete(true), 1800);
       } else {
@@ -398,6 +429,8 @@ export default function Level3() {
     setWrongPicks(0);
     setShowLevelComplete(false);
     setGameId(prev => prev + 1);
+    const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+    localStorage.removeItem(key);
   };
 
   const formatElapsed = (seconds: number) => {

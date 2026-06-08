@@ -27,13 +27,19 @@ function AuthCallbackContent() {
       }
 
       try {
+        let session = null;
         if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
+          session = data.session;
         }
 
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
+        if (!session) {
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError) throw sessionError;
+          session = sessionData.session;
+        }
+
         if (!session) throw new Error("Google login did not create a session.");
 
         localStorage.removeItem("escapeRoomGuestMode");

@@ -166,7 +166,7 @@ type LocalLeaderboardEntry = {
 
 export default function Level5Page() {
   const router = useRouter();
-  const { items, isLoaded: isInventoryLoaded, addItem, removeItem, equippedItem, setEquippedItem } = useInventory();
+  const { items, isLoaded: isInventoryLoaded, addItem, removeItem, equippedItem, setEquippedItem, roomCode } = useInventory();
   const { isArtisan, isScribe } = useRoleAccess();
   const initialRingRotations = useRef(getRandomRingRotations());
 
@@ -188,25 +188,58 @@ export default function Level5Page() {
   const dialRef = useRef<HTMLDivElement>(null);
   const hasClearedStaleLevel5State = useRef(false);
 
+  // Load state from localStorage on mount/roomCode change
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl5_${roomCode}` : `escapeRoomState_lvl5_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.view) setView(parsed.view);
+        if (Array.isArray(parsed.leverPositions)) setLeverPositions(parsed.leverPositions);
+        if (typeof parsed.leversSolved === "boolean") setLeversSolved(parsed.leversSolved);
+        if (typeof parsed.showNote === "boolean") setShowNote(parsed.showNote);
+        if (Array.isArray(parsed.ringRotations)) setRingRotations(parsed.ringRotations);
+        if (typeof parsed.chestOpen === "boolean") setChestOpen(parsed.chestOpen);
+        if (Array.isArray(parsed.altarSlots)) setAltarSlots(parsed.altarSlots);
+        if (typeof parsed.doorOpen === "boolean") setDoorOpen(parsed.doorOpen);
+        if (parsed.victoryStats) setVictoryStats(parsed.victoryStats);
+      } catch (e) {
+        console.error("Failed to load saved level5 state", e);
+      }
+    }
+  }, [roomCode]);
+
+  // Save Level 5 state to localStorage when any state changes
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl5_${roomCode}` : `escapeRoomState_lvl5_single`;
+    const stateToSave = {
+      view,
+      leverPositions,
+      leversSolved,
+      showNote,
+      ringRotations,
+      chestOpen,
+      altarSlots,
+      doorOpen,
+      victoryStats
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [view, leverPositions, leversSolved, showNote, ringRotations, chestOpen, altarSlots, doorOpen, victoryStats, roomCode]);
+
   useEffect(() => {
     if (!isInventoryLoaded) return;
     if (hasClearedStaleLevel5State.current) return;
     hasClearedStaleLevel5State.current = true;
 
-    [
-      "escapeRoomLevel5LeverPositions",
-      "escapeRoomLevel5LeversSolved",
-      "escapeRoomLevel5RingRotations",
-      "escapeRoomLevel5ChestOpen",
-      "escapeRoomLevel5AltarSlots",
-      "escapeRoomLevel5DoorOpen",
-    ].forEach(key => localStorage.removeItem(key));
-
+    // Remove items from previous levels that are not Level 5 items
     items.forEach(item => {
-      removeItem(item.id);
+      if (!LEVEL5_ITEM_IDS.includes(item.id)) {
+        removeItem(item.id);
+      }
     });
 
-    if (equippedItem) {
+    if (equippedItem && !LEVEL5_ITEM_IDS.includes(equippedItem)) {
       setEquippedItem(null);
     }
   }, [equippedItem, isInventoryLoaded, items, removeItem, setEquippedItem]);
@@ -352,7 +385,7 @@ export default function Level5Page() {
     const completedAt = new Date().toISOString();
     const localEntry: LocalLeaderboardEntry = {
       username: localStorage.getItem("escapeRoomUsername") || "Guest Explorer",
-      current_level: 5,
+      current_level: 6,
       remaining_time: stats.remainingSeconds,
       best_score: stats.score,
       completed_at: completedAt,
@@ -378,7 +411,7 @@ export default function Level5Page() {
       const { error } = await supabase
         .from("player")
         .update({
-          current_level: 5,
+          current_level: 6,
           remaining_time: stats.remainingSeconds,
           best_score: bestScore,
         })
@@ -395,12 +428,16 @@ export default function Level5Page() {
   const completeEscapeRoom = () => {
     const remainingSeconds = Math.max(0, timeLeft);
     const elapsedSeconds = GAME_DURATION - remainingSeconds;
-    const score = Math.max(100, 1000 + remainingSeconds * 2);
+    const score = 5 * 1000 + remainingSeconds * 2;
     const stats = { elapsedSeconds, remainingSeconds, score };
 
     localStorage.setItem("escapeRoomCompletedLevel", "5");
     localStorage.setItem("escapeRoomVictoryStats", JSON.stringify(stats));
     localStorage.removeItem("escapeRoomEndTime");
+    
+    const key = roomCode ? `escapeRoomState_lvl5_${roomCode}` : `escapeRoomState_lvl5_single`;
+    localStorage.removeItem(key);
+    
     setVictoryStats(stats);
     void saveLeaderboardScore(stats);
 
