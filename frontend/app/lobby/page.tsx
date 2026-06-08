@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2, Users, LogOut, User } from "lucide-react";
+import { Lock, CheckCircle, Volume2, VolumeX, BookOpen, ChevronRight, Trophy, Loader2, Users, LogOut, User, Copy, Check } from "lucide-react";
 import "../particles.css";
 import { createClient } from '@supabase/supabase-js'
 import { useAudio } from "@/lib/AudioContext"
@@ -46,16 +46,17 @@ type LeaderboardPlayer = {
 
 const completedFromPlayer = (player?: { current_level?: number; best_score?: number } | null) => {
   if (!player) return 0;
-  if ((player.best_score || 0) > 0) return 5;
+  if ((player.current_level || 1) >= 6 || (player.current_level === 5 && (player.best_score || 0) > 0)) return 5;
   return Math.max(0, (player.current_level || 1) - 1);
 };
 
 const clearRunStorage = () => {
   Object.keys(localStorage)
-    .filter((key) => key.startsWith("escapeRoomLevel"))
+    .filter((key) => key.startsWith("escapeRoomLevel") || key.startsWith("escapeRoomState"))
     .forEach((key) => localStorage.removeItem(key));
 
   localStorage.setItem("escapeRoomCompletedLevel", "0");
+  localStorage.setItem("escapeRoomTimeLeft", String(GAME_DURATION));
   localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
   localStorage.removeItem("escapeRoomTimeExpired");
   localStorage.removeItem("escapeRoomInventory");
@@ -71,9 +72,13 @@ const PLAYER_ROLES: { id: PlayerRole; title: string; description: string }[] = [
 
 export default function IntroHome() {
   const router = useRouter();
-  const { roomCode, setRoomCode, currentRole, setCurrentRole } = useInventory();
+  const { roomCode, setRoomCode, currentRole, setCurrentRole, broadcastRoomEvent, onRoomEvent } = useInventory();
   const [showMultiplayer, setShowMultiplayer] = useState(false);
   const [inputRoomCode, setInputRoomCode] = useState("");
+  const [copiedRoomCode, setCopiedRoomCode] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [roomStarted, setRoomStarted] = useState(true);
+  const [roomPlayers, setRoomPlayers] = useState<{ username: string; role: string; id: string }[]>([]);
   
   const [showProfile, setShowProfile] = useState(false);
   const [userProfile, setUserProfile] = useState<{
@@ -153,31 +158,6 @@ export default function IntroHome() {
   }, []);
 
   useEffect(() => {
-    // Check Supabase session and ensure player profile exists (for Google OAuth users)
-    const ensurePlayerProfile = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        // Check if user exists in player table
-        const { data: player } = await supabase
-          .from('player')
-          .select('id')
-          .eq('id', session.user.id)
-          .single();
-          
-        if (!player) {
-          // If not, they probably logged in via Google for the first time. Create profile.
-          await supabase.from('player').insert([{
-            id: session.user.id,
-            username: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
-            current_level: 1,
-            best_score: 0,
-            remaining_time: 1800
-          }]);
-        }
-      }
-    };
-    ensurePlayerProfile();
-
     const style = document.createElement('style');
     style.innerHTML = `
       @keyframes flicker {
@@ -230,15 +210,17 @@ export default function IntroHome() {
       const isGuestMode = localStorage.getItem("escapeRoomGuestMode") === "1";
       if (isGuestMode) {
         const guestCompletedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
-        const endTime = parseInt(localStorage.getItem("escapeRoomEndTime") || "0", 10);
-        const expired = localStorage.getItem("escapeRoomTimeExpired") === "1" || (!!endTime && endTime <= Date.now());
+        const timeLeftStr = localStorage.getItem("escapeRoomTimeLeft");
+        const timeLeftVal = timeLeftStr ? parseInt(timeLeftStr, 10) : (localStorage.getItem("escapeRoomEndTime") ? Math.max(0, Math.floor((parseInt(localStorage.getItem("escapeRoomEndTime") || "0", 10) - Date.now()) / 1000)) : GAME_DURATION);
+        const expired = localStorage.getItem("escapeRoomTimeExpired") === "1" || timeLeftVal <= 0;
+        
         setCompletedLevel(guestCompletedLevel);
         setIsAccountRunExpired(expired);
         setUserProfile({
           username: 'Guest Explorer',
           email: 'guest session',
           current_level: guestCompletedLevel + 1,
-          remaining_time: expired ? 0 : Math.max(0, Math.floor((endTime - Date.now()) / 1000)) || GAME_DURATION,
+          remaining_time: expired ? 0 : timeLeftVal || GAME_DURATION,
           best_score: 0
         });
         return;
@@ -246,16 +228,47 @@ export default function IntroHome() {
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const { data: player } = await supabase
+        // 1. Ensure player profile exists first using maybeSingle() to avoid crash
+        const { data: existingPlayer } = await supabase
           .from('player')
-          .select('username, current_level, remaining_time, best_score')
+          .select('id')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle();
+
+        let player = null;
+        if (!existingPlayer) {
+          const newUsername = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer';
+          const { data: inserted, error: insertError } = await supabase
+            .from('player')
+            .insert([{
+              id: session.user.id,
+              username: newUsername,
+              current_level: 1,
+              best_score: 0,
+              remaining_time: GAME_DURATION
+            }])
+            .select()
+            .maybeSingle();
+          
+          if (!insertError) {
+            player = inserted;
+          }
+        }
+
+        if (!player) {
+          const { data: fetchedPlayer } = await supabase
+            .from('player')
+            .select('username, current_level, remaining_time, best_score')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          player = fetchedPlayer;
+        }
 
         const accountCompletedLevel = completedFromPlayer(player);
         const accountRemainingTime = player?.remaining_time ?? 1800;
         const expired = accountRemainingTime <= 0;
         localStorage.setItem("escapeRoomCompletedLevel", String(accountCompletedLevel));
+        localStorage.setItem("escapeRoomTimeLeft", String(accountRemainingTime));
         localStorage.setItem("escapeRoomEndTime", String(Date.now() + Math.max(0, accountRemainingTime) * 1000));
         if (expired) localStorage.setItem("escapeRoomTimeExpired", "1");
         else localStorage.removeItem("escapeRoomTimeExpired");
@@ -271,21 +284,258 @@ export default function IntroHome() {
         });
       } else {
         const guestCompletedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
-        const endTime = parseInt(localStorage.getItem("escapeRoomEndTime") || "0", 10);
-        const expired = localStorage.getItem("escapeRoomTimeExpired") === "1" || (!!endTime && endTime <= Date.now());
+        const timeLeftStr = localStorage.getItem("escapeRoomTimeLeft");
+        const timeLeftVal = timeLeftStr ? parseInt(timeLeftStr, 10) : (localStorage.getItem("escapeRoomEndTime") ? Math.max(0, Math.floor((parseInt(localStorage.getItem("escapeRoomEndTime") || "0", 10) - Date.now()) / 1000)) : GAME_DURATION);
+        const expired = localStorage.getItem("escapeRoomTimeExpired") === "1" || timeLeftVal <= 0;
         setCompletedLevel(guestCompletedLevel);
         setIsAccountRunExpired(expired);
         setUserProfile({
           username: 'Anonymous Explorer',
           email: 'anonymous@catacombs.io',
           current_level: guestCompletedLevel + 1,
-          remaining_time: expired ? 0 : Math.max(0, Math.floor((endTime - Date.now()) / 1000)) || GAME_DURATION,
+          remaining_time: expired ? 0 : timeLeftVal || GAME_DURATION,
           best_score: 0
         });
       }
     };
     fetchSession();
   }, []);
+
+  // Listen for real-time room start status and host status
+  useEffect(() => {
+    if (!roomCode) {
+      setIsHost(false);
+      setRoomStarted(true);
+      return;
+    }
+
+    let roomSubscription: any = null;
+
+    async function checkRoom() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUserId = session?.user?.id;
+
+        let room = null;
+        try {
+          const { data } = await supabase
+            .from("rooms")
+            .select("created_by, is_started")
+            .eq("code", roomCode)
+            .maybeSingle();
+          room = data;
+        } catch (e) {
+          // Table doesn't exist, ignore
+        }
+
+        if (room) {
+          const isCreator = currentUserId && room.created_by === currentUserId;
+          const isLocalHost = localStorage.getItem(`escapeRoomIsHost_${roomCode}`) === "true";
+          setIsHost(!!(isCreator || isLocalHost));
+          setRoomStarted(room.is_started !== false);
+
+          // Subscribe to Postgres changes on this specific room (optional fallback)
+          try {
+            roomSubscription = supabase
+              .channel(`lobby-room-status-${roomCode}`)
+              .on(
+                "postgres_changes",
+                {
+                  event: "UPDATE",
+                  schema: "public",
+                  table: "rooms",
+                  filter: `code=eq.${roomCode}`,
+                },
+                (payload) => {
+                  const newStarted = payload.new?.is_started;
+                  if (newStarted !== undefined && newStarted !== null) {
+                    setRoomStarted(newStarted);
+                  }
+                }
+              )
+              .subscribe();
+          } catch (e) {
+            // Replication fails, ignore
+          }
+        } else {
+          // Fallback if table doesn't exist: rely on local storage for host status
+          const isLocalHost = localStorage.getItem(`escapeRoomIsHost_${roomCode}`) === "true";
+          setIsHost(isLocalHost);
+          setRoomStarted(false); // starts as paused/waiting
+
+          try {
+            const creatorId = currentUserId || "guest_" + Math.random().toString(36).substring(2, 9);
+            await supabase.from("rooms").insert([{
+              code: roomCode,
+              created_by: creatorId,
+              remaining_time: GAME_DURATION,
+              is_started: false
+            }]);
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.error("Error checking room status:", err);
+      }
+    }
+
+    checkRoom();
+
+    return () => {
+      if (roomSubscription) {
+        roomSubscription.unsubscribe();
+      }
+    };
+  }, [roomCode]);
+
+  // Synchronize lobby status between Host and Guests using realtime broadcast
+  useEffect(() => {
+    if (!roomCode) return;
+
+    const unsubscribeStarted = onRoomEvent("CHAMBER_STARTED", (payload) => {
+      console.log("[Lobby] Chamber started by host!", payload);
+      setRoomStarted(true);
+      localStorage.setItem("escapeRoomTimeLeft", String(GAME_DURATION));
+      localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+      localStorage.removeItem("escapeRoomTimeExpired");
+    });
+
+    const unsubscribeStatus = onRoomEvent("LOBBY_STATUS", (payload: any) => {
+      if (!isHost && payload && payload.roomStarted !== undefined) {
+        setRoomStarted(payload.roomStarted);
+      }
+    });
+
+    const unsubscribeReq = onRoomEvent("REQUEST_LOBBY_STATUS", () => {
+      if (isHost) {
+        broadcastRoomEvent("LOBBY_STATUS", { roomStarted: roomStarted });
+      }
+    });
+
+    // Guests request status on mount or when joining
+    if (!isHost) {
+      broadcastRoomEvent("REQUEST_LOBBY_STATUS", {});
+    }
+
+    return () => {
+      unsubscribeStarted();
+      unsubscribeStatus();
+      unsubscribeReq();
+    };
+  }, [roomCode, isHost, roomStarted, onRoomEvent, broadcastRoomEvent]);
+
+  // Redirect guest players when host starts the room
+  useEffect(() => {
+    if (roomCode && roomStarted && isExploring) {
+      const currentLevelToEnter = Math.min(completedLevel + 1, 5);
+      attemptEnterDoor(currentLevelToEnter);
+    }
+  }, [roomStarted, roomCode, isExploring, completedLevel]);
+  // Realtime Presence subscription to track players in the room
+  useEffect(() => {
+    if (!roomCode) {
+      setRoomPlayers([]);
+      return;
+    }
+
+    const channelName = `presence-room-${roomCode}`;
+    const channel = supabase.channel(channelName);
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const playersList: any[] = [];
+        let hostStartedState = false;
+        
+        Object.keys(state).forEach((key) => {
+          const presences = state[key] as any[];
+          presences.forEach((p) => {
+            playersList.push({
+              id: p.id,
+              username: p.username || "Explorer",
+              role: p.role || "scribe",
+              isHost: p.isHost || false
+            });
+            if (p.isHost && p.roomStarted) {
+              hostStartedState = true;
+            }
+          });
+        });
+        
+        const uniquePlayers = playersList.filter((p, index, self) => 
+          self.findIndex((pl) => pl.id === p.id) === index
+        );
+        
+        setRoomPlayers(uniquePlayers);
+        if (hostStartedState) {
+          setRoomStarted(true);
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          const { data: { session } } = await supabase.auth.getSession();
+          const myId = session?.user?.id || "guest_" + Math.random().toString(36).substring(2, 9);
+          
+          await channel.track({
+            id: myId,
+            username: userProfile?.username || localStorage.getItem("escapeRoomUsername") || "Explorer",
+            role: currentRole || "scribe",
+            isHost: isHost,
+            roomStarted: roomStarted
+          });
+        }
+      });
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [roomCode, userProfile?.username, currentRole, isHost, roomStarted]);
+
+  const handleHostRoom = async () => {
+    const generatedCode = "ESC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const creatorId = authData?.user?.id || "guest_" + Math.random().toString(36).substring(2, 9);
+      
+      await supabase
+        .from("rooms")
+        .insert([{
+          code: generatedCode,
+          created_by: creatorId,
+          remaining_time: GAME_DURATION,
+          is_started: false
+        }]);
+    } catch (e) {
+      // Ignore DB errors if table doesn't exist
+    }
+    localStorage.setItem(`escapeRoomIsHost_${generatedCode}`, "true");
+    enterRoomWithRole(generatedCode, "scribe");
+  };
+
+  const startRoomChamber = async () => {
+    if (!roomCode) return;
+    
+    // 1. Broadcast started event immediately to guest teammates
+    broadcastRoomEvent("CHAMBER_STARTED", { startTime: Date.now() });
+
+    // 2. Set local states
+    setRoomStarted(true);
+    localStorage.setItem("escapeRoomTimeLeft", String(GAME_DURATION));
+    localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+    localStorage.removeItem("escapeRoomTimeExpired");
+
+    // 3. Optional DB update fallback
+    try {
+      await supabase
+        .from("rooms")
+        .update({ is_started: true, remaining_time: GAME_DURATION })
+        .eq("code", roomCode);
+    } catch (err) {
+      // Table doesn't exist, ignore
+    }
+
+    // 4. Navigate to Level 1
+    attemptEnterDoor(1);
+  };
 
   const restartRun = async () => {
     setIsRestartingRun(true);
@@ -323,6 +573,11 @@ export default function IntroHome() {
        return;
     }
 
+    if (roomCode && !roomStarted) {
+       setShowMultiplayer(true);
+       return;
+    }
+
     const isUnlocked = level === 1 || completedLevel >= level - 1;
     if (!isUnlocked) {
        setShakingDoor(level);
@@ -330,8 +585,9 @@ export default function IntroHome() {
        return;
     }
 
-    const existingEndTime = localStorage.getItem("escapeRoomEndTime");
-    if (!existingEndTime || parseInt(existingEndTime, 10) <= Date.now()) {
+    const timeLeftStr = localStorage.getItem("escapeRoomTimeLeft");
+    const timeLeftVal = timeLeftStr ? parseInt(timeLeftStr, 10) : (localStorage.getItem("escapeRoomEndTime") ? Math.max(0, Math.floor((parseInt(localStorage.getItem("escapeRoomEndTime") || "0", 10) - Date.now()) / 1000)) : GAME_DURATION);
+    if (timeLeftVal <= 0) {
        setIsAccountRunExpired(true);
        setIsGameOver(true);
        localStorage.setItem("escapeRoomTimeExpired", "1");
@@ -354,6 +610,17 @@ export default function IntroHome() {
   const enterRoomWithRole = (code: string, role: PlayerRole) => {
     setRoomCode(code);
     setCurrentRole(role);
+  };
+
+  const copyRoomCodeToClipboard = () => {
+    if (roomCode) {
+      navigator.clipboard.writeText(roomCode).then(() => {
+        setCopiedRoomCode(true);
+        setTimeout(() => setCopiedRoomCode(false), 2000);
+      }).catch(err => {
+        console.error('Failed to copy room code:', err);
+      });
+    }
   };
 
   return (
@@ -615,17 +882,44 @@ export default function IntroHome() {
 
          {/* 4. Bottom Play Button Container (Anchored at very bottom sequence) */}
          <div className={`w-full flex justify-center pb-24 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
-            <button 
-               onClick={() => isAccountRunExpired ? restartRun() : attemptEnterDoor(Math.min(completedLevel + 1, 5))}
-               disabled={isRestartingRun}
-               className={`font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 uppercase border-4 border-white/50 disabled:opacity-60 disabled:cursor-wait
-                  ${isAccountRunExpired
-                    ? "bg-[radial-gradient(ellipse_at_center,_#ffb3b3_0%,_#a72626_100%)] shadow-[0_0_100px_rgba(180,30,30,0.8)]"
-                    : "bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] animate-pulse"
-                  }`}
-            >
-               {isRestartingRun ? "Restarting..." : isAccountRunExpired ? "Restart Run" : completedLevel > 0 ? `Resume (Ch1-${Math.min(completedLevel + 1, 5)})` : "Play"}
-            </button>
+            {roomCode ? (
+               !roomStarted ? (
+                  isHost ? (
+                     <button 
+                        onClick={startRoomChamber}
+                        className="font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 uppercase border-4 border-white/50 bg-[radial-gradient(ellipse_at_center,_#a7f3d0_0%,_#047857_100%)] shadow-[0_0_100px_rgba(16,185,129,0.8)] hover:shadow-[0_0_150px_rgba(167,243,208,1)] animate-pulse"
+                     >
+                        Start Escape Room
+                     </button>
+                  ) : (
+                     <button 
+                        disabled
+                        className="font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl transition-all duration-300 uppercase border-4 border-white/30 bg-[radial-gradient(ellipse_at_center,_#e5e7eb_0%,_#9ca3af_100%)] shadow-[0_0_50px_rgba(156,163,175,0.4)] opacity-70 cursor-not-allowed animate-pulse"
+                     >
+                        Waiting for Host...
+                     </button>
+                  )
+               ) : (
+                  <button 
+                     onClick={() => attemptEnterDoor(Math.min(completedLevel + 1, 5))}
+                     className="font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 uppercase border-4 border-white/50 bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] animate-pulse"
+                  >
+                     Enter Chamber
+                  </button>
+               )
+            ) : (
+               <button 
+                  onClick={() => isAccountRunExpired ? restartRun() : attemptEnterDoor(Math.min(completedLevel + 1, 5))}
+                  disabled={isRestartingRun}
+                  className={`font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 uppercase border-4 border-white/50 disabled:opacity-60 disabled:cursor-wait
+                     ${isAccountRunExpired
+                       ? "bg-[radial-gradient(ellipse_at_center,_#ffb3b3_0%,_#a72626_100%)] shadow-[0_0_100px_rgba(180,30,30,0.8)]"
+                       : "bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] animate-pulse"
+                     }`}
+               >
+                  {isRestartingRun ? "Restarting..." : isAccountRunExpired ? "Restart Run" : completedLevel > 0 ? `Resume (Ch1-${Math.min(completedLevel + 1, 5)})` : "Play"}
+               </button>
+            )}
          </div>
 
       </div>
@@ -705,7 +999,7 @@ export default function IntroHome() {
                               const isTop1 = index === 0;
                               const isTop2 = index === 1;
                               const isTop3 = index === 2;
-                              const highestChamber = player.current_level || 1;
+                              const highestChamber = Math.min(5, player.current_level || 1);
                               
                               let rankColor = "text-[#c7baaa]";
                               if (isTop1) rankColor = "text-[#d4af37] font-bold drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]";
@@ -762,13 +1056,80 @@ export default function IntroHome() {
                <div className="flex flex-col gap-6 text-[#e5d8b3] text-center">
                   {roomCode ? (
                      <div className="space-y-6">
-                        <div className="p-6 bg-[#2a1d0f] border-2 border-[#5c4026] rounded-xl">
-                           <p className="text-[#8c7a6b] text-sm uppercase tracking-widest mb-2">Connected to Chamber</p>
-                           <h3 className="text-4xl text-[#d4af37] font-bold tracking-[0.2em]">{roomCode}</h3>
+                        <div className="p-6 bg-[#2a1d0f] border-2 border-[#5c4026] rounded-xl flex items-center justify-between gap-4">
+                           <div>
+                              <p className="text-[#8c7a6b] text-sm uppercase tracking-widest mb-2">Connected to Chamber</p>
+                              <h3 className="text-4xl text-[#d4af37] font-bold tracking-[0.2em]">{roomCode}</h3>
+                           </div>
+                           <button
+                              onClick={copyRoomCodeToClipboard}
+                              className="flex flex-col items-center justify-center gap-2 p-4 bg-black/50 border border-[#d4af37]/50 hover:border-[#d4af37] rounded-lg transition-all hover:bg-[#d4af37]/10"
+                              title="Copy room code"
+                           >
+                              {copiedRoomCode ? (
+                                 <>
+                                    <Check size={24} className="text-green-400" />
+                                    <span className="text-[10px] uppercase tracking-widest text-green-400 font-bold">Copied!</span>
+                                 </>
+                              ) : (
+                                 <>
+                                    <Copy size={24} className="text-[#d4af37]" />
+                                    <span className="text-[10px] uppercase tracking-widest text-[#d4af37] font-bold">Copy Code</span>
+                                 </>
+                              )}
+                           </button>
                         </div>
                         <p className="text-lg font-cormorant italic text-[#a89f91] px-4 leading-relaxed">
                            "Your inventory and progression are now bound to all players inside this specific chamber. Items gathered will instantly synchronise."
                         </p>
+                        {/* Connected Explorers List */}
+                        <div className="p-5 bg-black/50 border border-[#5c4026]/70 rounded-xl text-left space-y-3">
+                           <p className="text-xs uppercase tracking-[0.2em] text-[#d4af37] font-cinzel font-bold">Connected Explorers ({roomPlayers.length})</p>
+                           {roomPlayers.length === 0 ? (
+                              <p className="text-xs font-cormorant italic text-[#8c7a6b]">No other explorers in this room yet...</p>
+                           ) : (
+                              <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                                 {roomPlayers.map((player) => (
+                                    <div 
+                                       key={player.id} 
+                                       className="flex items-center justify-between border-b border-[#5c4026]/30 pb-2 last:border-0 last:pb-0 text-sm font-cormorant text-[#e5d8b3]"
+                                    >
+                                       <div className="flex items-center gap-2">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                          <span className="font-bold">{player.username}</span>
+                                       </div>
+                                       <span className="text-xs uppercase tracking-wider text-[#8c7a6b] font-cinzel">{player.role}</span>
+                                    </div>
+                                 ))}
+                              </div>
+                           )}
+                        </div>
+                        <div className="p-5 bg-[#1b1208]/80 border border-[#d4af37]/30 rounded-xl space-y-4">
+                           <p className="text-xs uppercase tracking-[0.2em] text-[#d4af37]">Chamber Start Control</p>
+                           {!roomStarted ? (
+                              isHost ? (
+                                 <div className="space-y-3">
+                                    <p className="text-sm font-cormorant italic text-[#c7baaa]">You are the scribe of this ritual. Start the chamber when all explorers have entered.</p>
+                                    <button
+                                       onClick={startRoomChamber}
+                                       className="w-full py-3 bg-gradient-to-r from-[#047857] to-[#059669] text-white hover:brightness-110 rounded-lg tracking-widest font-bold transition-all uppercase shadow-[0_0_20px_rgba(16,185,129,0.3)] duration-300 font-cinzel text-sm border border-green-500/30"
+                                    >
+                                       Start Escape Room
+                                    </button>
+                                 </div>
+                              ) : (
+                                 <div className="space-y-2 py-2">
+                                    <p className="text-sm font-cormorant italic text-[#ffcda3] animate-pulse">Waiting for the Host to start the chamber...</p>
+                                    <div className="mx-auto w-8 h-8 border-2 border-[#d4af37] border-t-transparent rounded-full animate-spin" />
+                                 </div>
+                              )
+                           ) : (
+                              <div className="py-2 text-green-400 font-bold flex items-center justify-center gap-2">
+                                 <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping" />
+                                 <span>CHAMBER ACTIVE (Timer Running)</span>
+                              </div>
+                           )}
+                        </div>
                         <div className="rounded-xl border border-[#5c4026]/70 bg-black/35 p-5 text-left">
                            <p className="mb-4 text-center text-xs uppercase tracking-[0.28em] text-[#d4af37]">Role Assignment</p>
                            <div className="grid grid-cols-1 gap-3">
@@ -812,11 +1173,7 @@ export default function IntroHome() {
                         <div className="space-y-4">
                            <h3 className="text-xl text-[#c7baaa] uppercase tracking-wider">Host a Private Session</h3>
                            <button
-                              onClick={() => {
-                                 // Generate random 6-character room code
-                                 const generatedCode = "ESC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-                                 enterRoomWithRole(generatedCode, "scribe");
-                              }}
+                              onClick={handleHostRoom}
                               className="w-full py-4 px-6 bg-gradient-to-r from-[#d4af37] to-[#b08d57] text-black hover:brightness-110 rounded-lg tracking-widest font-bold transition-all uppercase shadow-[0_0_35px_rgba(212,175,55,0.3)] duration-300"
                            >
                               Generate Room Code

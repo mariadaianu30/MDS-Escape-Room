@@ -40,7 +40,7 @@ const GAME_DURATION = 30 * 60;
 
 export default function Level4Page() {
   const router = useRouter();
-  const { equippedItem, setEquippedItem, removeItem, items } = useInventory();
+  const { equippedItem, setEquippedItem, removeItem, items, roomCode } = useInventory();
   const { isArtisan, isScribe, isOracle } = useRoleAccess();
 
   // --- STATE-URI (Toate în interiorul funcției!) ---
@@ -73,6 +73,37 @@ export default function Level4Page() {
   };
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Load state from localStorage on mount/roomCode change
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl4_${roomCode}` : `escapeRoomState_lvl4_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.stage) setStage(parsed.stage);
+        if (typeof parsed.puzzleIndex === "number") setPuzzleIndex(parsed.puzzleIndex);
+        if (typeof parsed.isParchmentUnsealed === "boolean") setIsParchmentUnsealed(parsed.isParchmentUnsealed);
+        if (typeof parsed.isQuillUsed === "boolean") setIsQuillUsed(parsed.isQuillUsed);
+        if (typeof parsed.input === "string") setInput(parsed.input);
+      } catch (e) {
+        console.error("Failed to load saved level4 state", e);
+      }
+    }
+  }, [roomCode]);
+
+  // Save Level 4 state to localStorage when any state changes
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl4_${roomCode}` : `escapeRoomState_lvl4_single`;
+    const stateToSave = {
+      stage,
+      puzzleIndex,
+      isParchmentUnsealed,
+      isQuillUsed,
+      input
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [stage, puzzleIndex, isParchmentUnsealed, isQuillUsed, input, roomCode]);
 
   useEffect(() => {
     if (equippedItem) {
@@ -153,6 +184,8 @@ export default function Level4Page() {
         } else {
           localStorage.setItem("escapeRoomCompletedLevel", "4");
           void saveAccountProgress(5);
+          const key = roomCode ? `escapeRoomState_lvl4_${roomCode}` : `escapeRoomState_lvl4_single`;
+          localStorage.removeItem(key);
           setStage("complete");
         }
       }, 1800);
