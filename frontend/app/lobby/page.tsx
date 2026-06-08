@@ -42,6 +42,12 @@ type LeaderboardPlayer = {
   completed_at?: string;
 };
 
+const completedFromPlayer = (player?: { current_level?: number; best_score?: number } | null) => {
+  if (!player) return 0;
+  if ((player.best_score || 0) > 0) return 5;
+  return Math.max(0, (player.current_level || 1) - 1);
+};
+
 export default function IntroHome() {
   const router = useRouter();
   const { roomCode, setRoomCode } = useInventory();
@@ -183,9 +189,7 @@ export default function IntroHome() {
     document.head.appendChild(style);
     
     const comp = localStorage.getItem("escapeRoomCompletedLevel");
-    if (comp) {
-       setCompletedLevel(parseInt(comp, 10));
-    }
+    if (comp) setCompletedLevel(parseInt(comp, 10));
 
     return () => {
       document.head.removeChild(style);
@@ -198,21 +202,29 @@ export default function IntroHome() {
       if (session?.user) {
         const { data: player } = await supabase
           .from('player')
-          .select('username, current_level, remaining_time')
+          .select('username, current_level, remaining_time, best_score')
           .eq('id', session.user.id)
           .single();
+
+        const accountCompletedLevel = completedFromPlayer(player);
+        const accountRemainingTime = player?.remaining_time ?? 1800;
+        localStorage.setItem("escapeRoomCompletedLevel", String(accountCompletedLevel));
+        localStorage.setItem("escapeRoomEndTime", String(Date.now() + accountRemainingTime * 1000));
+        setCompletedLevel(accountCompletedLevel);
         
         setUserProfile({
           username: player?.username || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
           email: session.user.email || '',
           current_level: player?.current_level || 1,
-          remaining_time: player?.remaining_time || 1800
+          remaining_time: accountRemainingTime
         });
       } else {
+        const guestCompletedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
+        setCompletedLevel(guestCompletedLevel);
         setUserProfile({
           username: 'Anonymous Explorer',
           email: 'anonymous@catacombs.io',
-          current_level: completedLevel + 1,
+          current_level: guestCompletedLevel + 1,
           remaining_time: 1800
         });
       }

@@ -11,6 +11,18 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
+const resetLocalGameSession = () => {
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith("escapeRoomLevel"))
+    .forEach((key) => localStorage.removeItem(key));
+
+  localStorage.setItem("escapeRoomCompletedLevel", "0");
+  localStorage.setItem("escapeRoomEndTime", String(Date.now() + 30 * 60 * 1000));
+  localStorage.removeItem("escapeRoomInventory");
+  localStorage.removeItem("escapeRoomVictoryStats");
+  localStorage.removeItem("escapeRoomRoomCode");
+};
+
 export default function AuthPage() {
   const router = useRouter();
   
@@ -48,6 +60,9 @@ export default function AuthPage() {
       setLoginError(error.message);
       setIsLoggingIn(false);
     } else {
+      localStorage.removeItem("escapeRoomVictoryStats");
+      localStorage.removeItem("escapeRoomInventory");
+      localStorage.removeItem("escapeRoomRoomCode");
       router.push("/lobby");
     }
   };
@@ -92,6 +107,7 @@ export default function AuthPage() {
 
       if (authData.session) {
         // If email confirmation is disabled, session is returned immediately
+        resetLocalGameSession();
         router.push("/lobby");
       } else {
         // If email confirmation is enabled, session will be null
@@ -122,9 +138,10 @@ export default function AuthPage() {
     }
   };
 
-  const handleGuestStart = () => {
-    localStorage.setItem("escapeRoomCompletedLevel", localStorage.getItem("escapeRoomCompletedLevel") || "0");
-    localStorage.setItem("escapeRoomEndTime", String(Date.now() + 30 * 60 * 1000));
+  const handleGuestStart = async () => {
+    await supabase.auth.signOut();
+    resetLocalGameSession();
+    localStorage.setItem("escapeRoomUsername", "Guest Explorer");
     router.push("/lobby");
   };
 

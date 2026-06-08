@@ -71,8 +71,10 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
       if (!error && data && data.remaining_time !== null) {
         setTimeLeft(data.remaining_time);
+        localStorage.setItem("escapeRoomEndTime", String(Date.now() + data.remaining_time * 1000));
       } else {
         setTimeLeft(GAME_DURATION);
+        localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
       }
     }
     
