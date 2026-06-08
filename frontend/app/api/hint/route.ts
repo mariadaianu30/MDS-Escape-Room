@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
-
 const HINT_COOLDOWN_SECONDS = 60;
 const MAX_HINT_LEVEL = 3;
 const AI_TIMEOUT_MS = 2800;
@@ -136,6 +132,10 @@ export async function POST(req: Request) {
         source: "fallback",
       });
     }
+
+    const groq = new Groq({
+      apiKey: process.env.GROQ_API_KEY,
+    });
 
     const chatCompletion = await withTimeout(
       groq.chat.completions.create({
