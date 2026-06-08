@@ -71,8 +71,15 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
 
       if (!error && data && data.remaining_time !== null) {
         setTimeLeft(data.remaining_time);
+        localStorage.setItem("escapeRoomEndTime", String(Date.now() + data.remaining_time * 1000));
+        if (data.remaining_time <= 0) {
+          localStorage.setItem("escapeRoomTimeExpired", "1");
+          if (pathname.startsWith("/level")) router.push("/lobby?gameover=time");
+        }
       } else {
         setTimeLeft(GAME_DURATION);
+        localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+        localStorage.removeItem("escapeRoomTimeExpired");
       }
     }
     
@@ -113,10 +120,9 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
   const handleTimeUp = async () => {
     setIsGameOver(true);
     
-    // Reset global state
-    localStorage.setItem("escapeRoomCompletedLevel", "0");
-    localStorage.removeItem("escapeRoomInventory");
-    await syncGameProgress(GAME_DURATION);
+    localStorage.setItem("escapeRoomTimeExpired", "1");
+    localStorage.setItem("escapeRoomEndTime", String(Date.now()));
+    await syncGameProgress(0);
     
     // Redirect to lobby with a query parameter for game over
     router.push("/lobby?gameover=time");
@@ -124,7 +130,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
     // Give some time to redirect then reset
     setTimeout(() => {
       setIsGameOver(false);
-      setTimeLeft(GAME_DURATION);
+      setTimeLeft(0);
     }, 2000);
   };
 

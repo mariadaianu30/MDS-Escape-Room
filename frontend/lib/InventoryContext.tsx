@@ -17,8 +17,11 @@ export type InventoryItem = {
   emojiFallback?: string;
 };
 
+export type PlayerRole = "scribe" | "artisan" | "oracle";
+
 interface InventoryContextType {
   items: InventoryItem[];
+  isLoaded: boolean;
   addItem: (item: InventoryItem) => void;
   removeItem: (id: string) => void;
   hasItem: (id: string) => boolean;
@@ -27,6 +30,8 @@ interface InventoryContextType {
   setEquippedItem: (id: string | null) => void;
   roomCode: string | null;
   setRoomCode: (code: string | null) => void;
+  currentRole: PlayerRole;
+  setCurrentRole: (role: PlayerRole) => void;
   broadcastRoomEvent: (event: string, payload: any) => void;
   onRoomEvent: (event: string, callback: (payload: any) => void) => () => void;
 }
@@ -37,6 +42,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [equippedItem, setEquippedItem] = useState<string | null>(null);
   const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [currentRole, setCurrentRoleState] = useState<PlayerRole>("scribe");
   const [isLoaded, setIsLoaded] = useState(false);
   const [username, setUsername] = useState<string>("Explorer");
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
@@ -104,6 +110,11 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     if (savedRoomCode) {
       setRoomCode(savedRoomCode);
     }
+
+    const savedRole = localStorage.getItem("escapeRoomPlayerRole") as PlayerRole | null;
+    if (savedRole && ["scribe", "artisan", "oracle"].includes(savedRole)) {
+      setCurrentRoleState(savedRole);
+    }
     
     setIsLoaded(true);
   }, []);
@@ -125,6 +136,12 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [roomCode, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("escapeRoomPlayerRole", currentRole);
+    }
+  }, [currentRole, isLoaded]);
 
   // Real-time Supabase subscription channel reference
   const channelRef = useRef<any>(null);
@@ -168,6 +185,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         if (!payload || payload.senderId === clientIdRef.current) return;
         
         console.log(`[Multiplayer Room Event] Broadcast received: ${payload.event}`, payload.payload);
+        if (payload.event === "ROLE_ASSIGNED" && payload.payload?.role && payload.payload?.playerName) {
+          addToast(`${payload.payload.playerName} is now ${payload.payload.role}.`);
+        }
         const callbacks = listenersRef.current[payload.event] || [];
         callbacks.forEach((cb) => cb(payload.payload));
       })
@@ -268,6 +288,25 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const setCurrentRole = (role: PlayerRole) => {
+    setCurrentRoleState(role);
+    localStorage.setItem("escapeRoomPlayerRole", role);
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "room_event",
+        payload: {
+          event: "ROLE_ASSIGNED",
+          payload: {
+            role,
+            playerName: username,
+          },
+          senderId: clientIdRef.current,
+        },
+      });
+    }
+  };
+
   const onRoomEvent = (event: string, callback: (payload: any) => void) => {
     if (!listenersRef.current[event]) {
       listenersRef.current[event] = [];
@@ -282,6 +321,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     <InventoryContext.Provider
       value={{
         items,
+        isLoaded,
         addItem,
         removeItem,
         hasItem,
@@ -290,6 +330,8 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         setEquippedItem,
         roomCode,
         setRoomCode,
+        currentRole,
+        setCurrentRole,
         broadcastRoomEvent,
         onRoomEvent
       }}

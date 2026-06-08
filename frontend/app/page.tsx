@@ -11,6 +11,21 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
+const GAME_DURATION = 30 * 60;
+
+const resetLocalGameSession = () => {
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith("escapeRoomLevel"))
+    .forEach((key) => localStorage.removeItem(key));
+
+  localStorage.setItem("escapeRoomCompletedLevel", "0");
+  localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+  localStorage.removeItem("escapeRoomTimeExpired");
+  localStorage.removeItem("escapeRoomInventory");
+  localStorage.removeItem("escapeRoomVictoryStats");
+  localStorage.removeItem("escapeRoomRoomCode");
+};
+
 export default function AuthPage() {
   const router = useRouter();
   
@@ -48,6 +63,11 @@ export default function AuthPage() {
       setLoginError(error.message);
       setIsLoggingIn(false);
     } else {
+      localStorage.removeItem("escapeRoomGuestMode");
+      localStorage.removeItem("escapeRoomVictoryStats");
+      localStorage.removeItem("escapeRoomInventory");
+      localStorage.removeItem("escapeRoomRoomCode");
+      localStorage.removeItem("escapeRoomTimeExpired");
       router.push("/lobby");
     }
   };
@@ -92,6 +112,8 @@ export default function AuthPage() {
 
       if (authData.session) {
         // If email confirmation is disabled, session is returned immediately
+        resetLocalGameSession();
+        localStorage.removeItem("escapeRoomGuestMode");
         router.push("/lobby");
       } else {
         // If email confirmation is enabled, session will be null
@@ -108,18 +130,31 @@ export default function AuthPage() {
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
+    setLoginError("");
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      localStorage.removeItem("escapeRoomGuestMode");
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/lobby`,
+          skipBrowserRedirect: true,
         }
       });
       if (error) throw error;
+      if (!data.url) throw new Error("Google login did not return a redirect URL.");
+      window.location.assign(data.url);
     } catch (error: any) {
       setLoginError(error.message || "An error occurred with Google login");
       setIsGoogleLoading(false);
     }
+  };
+
+  const handleGuestStart = () => {
+    localStorage.setItem("escapeRoomGuestMode", "1");
+    resetLocalGameSession();
+    localStorage.setItem("escapeRoomUsername", "Guest Explorer");
+    void supabase.auth.signOut();
+    window.location.assign("/lobby?guest=1");
   };
 
   return (
@@ -336,6 +371,14 @@ export default function AuthPage() {
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
             {isGoogleLoading ? "Connecting..." : "Google"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGuestStart}
+            className="mt-3 w-full border border-[#d4af37]/50 bg-[#d4af37]/10 px-4 py-3.5 font-cinzel text-xs uppercase tracking-widest text-[#d4af37] shadow-lg transition-all hover:border-[#d4af37] hover:bg-[#d4af37] hover:text-black"
+          >
+            Start as Guest
           </button>
         </div>
 

@@ -1,40 +1,122 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type FormEvent } from "react";
 import { usePathname } from "next/navigation";
 import { X, Send, Eye } from "lucide-react";
+import { useRoleAccess } from "@/components/RoleGate";
+import { useInventory } from "@/lib/InventoryContext";
 
 interface Message {
   role: "user" | "spirit";
   content: string;
+  sender?: string;
+}
+
+interface ChatPayload {
+  role: "user" | "spirit";
+  content: string;
+  sender?: string;
+}
+
+interface CooldownPayload {
+  timestamp: number;
 }
 
 export default function AIHintDialog() {
+  const { isOracle } = useRoleAccess(); // Poți păstra asta dacă vrei ca DOAR Oracle să poată SCRIE, dar toți trebuie să vadă chat-ul
+  const { broadcastRoomEvent, onRoomEvent } = useInventory();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: "spirit", content: "I am the spirit of the library... what do you seek?" }
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [cooldownEndTimestamp, setCooldownEndTimestamp] = useState<number | null>(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+  const [username, setUsername] = useState<string>("Explorer");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
   const pathname = usePathname();
 
-  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    const savedUsername = localStorage.getItem("escapeRoomUsername");
+    if (savedUsername) {
+      setUsername(savedUsername);
+    }
+  }, []);
+
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isOpen]);
 
-  // Hide on lobby or root
+  // Ascultătorul de evenimente în timp real pentru cameră
+  useEffect(() => {
+    const chatUnsub = onRoomEvent("CHAT_MESSAGE", (payload: ChatPayload) => {
+      // Evităm duplicarea mesajului pentru cel care l-a trimis inițial
+      setMessages((prev) => {
+        const isDuplicate = prev.some(
+          (m) => m.content === payload.content && m.role === payload.role && m.sender === payload.sender
+        );
+        if (isDuplicate && payload.role === "user") return prev;
+        return [...prev, payload];
+      });
+
+      // Dacă vine un mesaj nou de la un coechipier sau AI, deschidem automat chatul sau declanșăm un indicator (opțional)
+      // Dacă se dorește încărcarea AI-ului vizual la toți:
+      if (payload.role === "user" && payload.sender !== username) {
+        setIsLoading(true);
+      } else if (payload.role === "spirit") {
+        setIsLoading(false);
+      }
+    });
+
+    const cooldownUnsub = onRoomEvent("HINT_COOLDOWN_START", (payload: CooldownPayload) => {
+      const nextEnd = payload.timestamp + 60000;
+      setCooldownEndTimestamp((current) => (current && current > nextEnd ? current : nextEnd));
+    });
+
+    return () => {
+      chatUnsub();
+      cooldownUnsub();
+    };
+  }, [onRoomEvent, username]);
+
+  useEffect(() => {
+    if (!cooldownEndTimestamp) {
+      setCooldownRemaining(0);
+      return;
+    }
+
+    const tick = () => {
+      const remainingMs = cooldownEndTimestamp - Date.now();
+      if (remainingMs <= 0) {
+        setCooldownEndTimestamp(null);
+        setCooldownRemaining(0);
+        return;
+      }
+      setCooldownRemaining(Math.ceil(remainingMs / 1000));
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 250);
+    return () => window.clearInterval(interval);
+  }, [cooldownEndTimestamp]);
+
+  const isCoolingDown = cooldownEndTimestamp !== null && cooldownEndTimestamp > Date.now();
+
+  // Verificare cale nivel
   if (!pathname || !pathname.startsWith('/level')) return null;
+
+  // CORECTURĂ CRITICĂ: Am scos "if (!isOracle) return null;" de aici. 
+  // Astfel, componenta se va randa pentru TOATĂ ECHIPA ca să vadă indiciile primite în timp real.
 
   const currentLevel = parseInt(pathname.match(/level(\d+)/)?.[1] || "1", 10);
   const currentPuzzleId = `level${currentLevel}_general`;
-  const oracleButtonPosition = currentLevel === 3
-    ? "bottom-24 left-4 lg:bottom-8 lg:left-6"
-    : "top-28 left-4 lg:top-28 lg:left-6";
+  // const oracleButtonPosition = currentLevel === 3
+  //   ? "bottom-24 left-4 lg:bottom-8 lg:left-6"
+  //   : "top-28 left-4 lg:top-28 lg:left-6";
+  const oracleButtonPosition = "bottom-8 left-6 lg:bottom-10 lg:left-8";
 
   const getPlayerId = () => {
     const existing = localStorage.getItem("escapeRoomPlayerId");
@@ -45,13 +127,29 @@ export default function AIHintDialog() {
     return created;
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
+  const startCooldown = (timestamp = Date.now()) => {
+    const nextEnd = timestamp + 60000;
+    setCooldownEndTimestamp((current) => (current && current > nextEnd ? current : nextEnd));
+    broadcastRoomEvent("HINT_COOLDOWN_START", { timestamp });
+  };
+
+  const toggleOpen = () => setIsOpen((prev) => !prev);
+
+  const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isCoolingDown) return;
 
     const userMsg = input.trim();
     setInput("");
-    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    
+    // Adăugăm local mesajul imediat pentru feedback vizual instant
+    setMessages((prev) => [...prev, { role: "user", content: userMsg, sender: username }]);
+    
+    // Declanșăm cooldown-ul pentru toți
+    startCooldown();
+    
+    // Trimitem mesajul prin WebSockets la echipă
+    broadcastRoomEvent("CHAT_MESSAGE", { role: "user", content: userMsg, sender: username });
     setIsLoading(true);
 
     try {
@@ -69,9 +167,12 @@ export default function AIHintDialog() {
       if (!res.ok) throw new Error("Failed to contact the spirit");
 
       const data = await res.json();
-      setMessages(prev => [...prev, { role: "spirit", content: data.hint }]);
+      const spiritMessage: Message = { role: "spirit", content: data.hint };
+      
+      setMessages((prev) => [...prev, spiritMessage]);
+      broadcastRoomEvent("CHAT_MESSAGE", spiritMessage);
     } catch (err) {
-      setMessages(prev => [...prev, { role: "spirit", content: "The spirits are silent... check your connection." }]);
+      setMessages((prev) => [...prev, { role: "spirit", content: "The spirits are silent... check your connection." }]);
     } finally {
       setIsLoading(false);
     }
@@ -79,23 +180,23 @@ export default function AIHintDialog() {
 
   return (
     <>
-      {/* Floating Eye Button */}
+      {/* Butonul plutitor rotund */}
       <button
-        onClick={() => setIsOpen(true)}
+        type="button"
+        onClick={toggleOpen}
         className={`fixed ${oracleButtonPosition} p-3 bg-black/80 border-2 border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] transition-all rounded-full shadow-[0_0_15px_black] z-[60] flex items-center justify-center group`}
         title="Consult the Spirits"
+        aria-label={isOpen ? "Close the Oracle chat" : "Open the Oracle chat"}
       >
         <Eye size={24} className="group-hover:animate-pulse" />
       </button>
 
-      {/* Modal Dialog */}
+      {/* Caseta de Chat (Modalul) */}
       {isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
-          
           <div className="relative w-full max-w-md h-[60vh] flex flex-col bg-[#150e09] border-[3px] border-[#5c4026] rounded-xl shadow-[0_0_80px_rgba(212,175,55,0.15)] overflow-hidden font-cormorant bg-[url('https://www.transparenttextures.com/patterns/black-paper.png')]">
             
-            {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-[#5c4026] bg-[#0a0705]">
               <div className="flex items-center gap-2 text-[#d4af37]">
                 <Eye size={20} className="animate-pulse" />
@@ -109,15 +210,16 @@ export default function AIHintDialog() {
               </button>
             </div>
 
-            {/* Chat Messages */}
+            {/* Zona de mesaje */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg, idx) => (
                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] p-3 rounded-lg border ${
-                    msg.role === 'user' 
-                    ? 'bg-[#2a1d0f] border-[#5c4026] text-[#e5d8b3]' 
-                    : 'bg-black/60 border-[#3c2a1a] text-[#c7baaa] italic'
+                    msg.role === 'user'
+                      ? 'bg-[#2a1d0f] border-[#5c4026] text-[#e5d8b3]'
+                      : 'bg-black/60 border-[#3c2a1a] text-[#c7baaa] italic'
                   }`}>
+                    {msg.sender && msg.role === 'user' ? <div className="text-[10px] text-[#b8a07f] uppercase tracking-[0.18em] mb-1">{msg.sender}</div> : null}
                     {msg.content}
                   </div>
                 </div>
@@ -134,24 +236,32 @@ export default function AIHintDialog() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Form */}
-            <form onSubmit={sendMessage} className="p-4 border-t border-[#5c4026] bg-[#0a0705] flex gap-2">
-              <input 
-                type="text" 
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask for guidance..."
-                className="flex-1 bg-black border border-[#5c4026] rounded-lg px-4 py-2 text-[#e5d8b3] focus:outline-none focus:border-[#d4af37] font-cormorant transition-colors placeholder:text-[#5c4026]"
-              />
-              <button 
-                type="submit"
-                disabled={isLoading || !input.trim()}
-                className="bg-[#2a1d0f] border border-[#5c4026] text-[#d4af37] p-2 rounded-lg hover:border-[#d4af37] hover:bg-[#3c2a1a] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send size={20} />
-              </button>
+            {/* Zona de input text */}
+            <form onSubmit={sendMessage} className="p-4 border-t border-[#5c4026] bg-[#0a0705]">
+              {isCoolingDown && (
+                <div className="mb-3 text-sm text-[#bf9a59] italic">
+                  The Oracle is resting... ({cooldownRemaining}s)
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={isOracle ? "Ask for guidance..." : "Only the Oracle can type..."}
+                  // Oricine e în cooldown este blocat. Dacă nu e Oracle, e blocat permanent la scriere.
+                  disabled={isLoading || isCoolingDown || !isOracle}
+                  className="flex-1 bg-black border border-[#5c4026] rounded-lg px-4 py-2 text-[#e5d8b3] focus:outline-none focus:border-[#d4af37] font-cormorant transition-colors placeholder:text-[#5c4026] disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading || !input.trim() || isCoolingDown || !isOracle}
+                  className="bg-[#2a1d0f] border border-[#5c4026] text-[#d4af37] p-2 rounded-lg hover:border-[#d4af37] hover:bg-[#3c2a1a] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send size={20} />
+                </button>
+              </div>
             </form>
-
           </div>
         </div>
       )}

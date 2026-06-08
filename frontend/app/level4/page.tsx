@@ -4,6 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
 import CollectibleItem from "@/components/CollectibleItem";
+import { saveAccountProgress } from "@/lib/progress";
+import { InspectionNarrator } from "@/components/InspectionNarrator";
+import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 
 // 1. MORSE_MAP și PUZZLES rămân aici (sunt constante, e ok să fie afară)
 const MORSE_MAP: Record<string, string> = {
@@ -38,6 +41,7 @@ const GAME_DURATION = 30 * 60;
 export default function Level4Page() {
   const router = useRouter();
   const { equippedItem, setEquippedItem, removeItem, items } = useInventory();
+  const { isArtisan, isScribe, isOracle } = useRoleAccess();
 
   // --- STATE-URI (Toate în interiorul funcției!) ---
   const [hintQuestion, setHintQuestion] = useState(""); 
@@ -147,7 +151,9 @@ export default function Level4Page() {
         if (puzzleIndex + 1 < PUZZLES.length) {
           setPuzzleIndex((i) => i + 1); setInput("");
         } else {
-          localStorage.setItem("escapeRoomCompletedLevel", "4"); setStage("complete");
+          localStorage.setItem("escapeRoomCompletedLevel", "4");
+          void saveAccountProgress(5);
+          setStage("complete");
         }
       }, 1800);
     } else {
@@ -274,6 +280,13 @@ export default function Level4Page() {
       `}</style>
 
       <div className="crypt-root">
+        <InspectionNarrator
+          objects={[
+            { id: "crypt", label: "Crypt Walls", level: 4 },
+            { id: "sealed_parchment", label: "Sealed Parchment", level: 4, state: { unsealed: isParchmentUnsealed } },
+            { id: "morse_table", label: "Morse Key", level: 4, state: { puzzle: currentPuzzle.id } },
+          ]}
+        />
 
 
         <header className="header">
@@ -309,14 +322,24 @@ export default function Level4Page() {
                   <div className="sealed-area" onClick={handleParchmentClick}>
                     <p style={{ fontSize: "2.5rem" }}>📜</p>
                     <p className="sealed-text">Sealed Parchment</p>
-                    <p className="sealed-hint">
-                      {equippedItem === SCISSORS_ITEM.id ? "Click here to cut the seal" : "Find the Scissors to unseal it"}
-                    </p>
+                    {isScribe ? (
+                      <p className="sealed-hint">
+                        {equippedItem === SCISSORS_ITEM.id ? "Click here to cut the seal" : "Find the Scissors to unseal it"}
+                      </p>
+                    ) : (
+                      <RoleBlockedNotice role="scribe" label="The parchment marks are visible only to the Scribe." />
+                    )}
                   </div>
                 ) : (
                   <>
-                    <p className="card-body" style={{ marginBottom: "1.5rem" }}>{currentPuzzle.flavor}</p>
-                    <div className="morse-display">{currentPuzzle.encoded}</div>
+                    {isScribe ? (
+                      <>
+                        <p className="card-body" style={{ marginBottom: "1.5rem" }}>{currentPuzzle.flavor}</p>
+                        <div className="morse-display">{currentPuzzle.encoded}</div>
+                      </>
+                    ) : (
+                      <RoleBlockedNotice role="scribe" label="The encoded inscription is visible only to the Scribe." />
+                    )}
                   </>
                 )}
 
@@ -329,8 +352,9 @@ export default function Level4Page() {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKey}
+                        disabled={!isArtisan}
                       />
-                      <button className="btn-submit" onClick={handleSubmit}>SUBMIT</button>
+                      <button className="btn-submit" onClick={handleSubmit} disabled={!isArtisan}>SUBMIT</button>
                     </div>
                   ) : (
                     <div className="write-area" onClick={handleInputAreaClick}>
@@ -341,6 +365,7 @@ export default function Level4Page() {
                   )
                 )}
                               
+              {isOracle ? (
               <div className="hint-section">
                 {/* Afișăm input-ul doar dacă NU suntem în cooldown și nu se încarcă deja un răspuns */}
                 {cooldown === 0 && !hintLoading && (
@@ -369,6 +394,9 @@ export default function Level4Page() {
                   </div>
                 )}
               </div>
+              ) : (
+                <RoleBlockedNotice role="oracle" label="Only the Oracle can ask the spirits for AI guidance." />
+              )}
             </div>
 
               <div className="morsemap-col">

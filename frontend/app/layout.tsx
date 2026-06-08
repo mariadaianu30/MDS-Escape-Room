@@ -6,6 +6,7 @@ import { AudioProvider } from "@/lib/AudioContext";
 import Inventory from "@/components/Inventory";
 import Timer from "@/components/Timer";
 import AIHintDialog from "@/components/AIHintDialog";
+import NarratorDialog from "@/components/NarratorDialog";
 import RouteGuard from "@/components/RouteGuard";
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({
               <Inventory />
               <Timer />
               <AIHintDialog />
+              <NarratorDialog />
             </InventoryProvider>
           </TimerProvider>
         </AudioProvider>
