@@ -122,6 +122,12 @@ export default function AuthPage() {
     }
   };
 
+  const handleGuestStart = () => {
+    localStorage.setItem("escapeRoomCompletedLevel", localStorage.getItem("escapeRoomCompletedLevel") || "0");
+    localStorage.setItem("escapeRoomEndTime", String(Date.now() + 30 * 60 * 1000));
+    router.push("/lobby");
+  };
+
   return (
     <main className="h-[100dvh] relative overflow-hidden bg-[#050302] font-cormorant flex flex-col items-center justify-center select-none p-4">
       {/* Background from Level 1 */}
@@ -336,6 +342,14 @@ export default function AuthPage() {
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
             {isGoogleLoading ? "Connecting..." : "Google"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGuestStart}
+            className="mt-3 w-full border border-[#d4af37]/50 bg-[#d4af37]/10 px-4 py-3.5 font-cinzel text-xs uppercase tracking-widest text-[#d4af37] shadow-lg transition-all hover:border-[#d4af37] hover:bg-[#d4af37] hover:text-black"
+          >
+            Start as Guest
           </button>
         </div>
 

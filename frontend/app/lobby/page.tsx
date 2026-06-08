@@ -34,6 +34,14 @@ const LABELS = [
   "The Final Chamber"
 ];
 
+type LeaderboardPlayer = {
+  username: string;
+  current_level: number;
+  remaining_time: number;
+  best_score: number;
+  completed_at?: string;
+};
+
 export default function IntroHome() {
   const router = useRouter();
   const { roomCode, setRoomCode } = useInventory();
@@ -57,7 +65,7 @@ export default function IntroHome() {
   const [shakingDoor, setShakingDoor] = useState<number | null>(null);
   const [isGameOver, setIsGameOver] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardPlayer[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
   const formatTime = (seconds: number) => {
@@ -72,16 +80,25 @@ export default function IntroHome() {
     const fetchLeaderboard = async () => {
       setLoadingLeaderboard(true);
       try {
+        const localScores = JSON.parse(localStorage.getItem("escapeRoomLocalLeaderboard") || "[]") as LeaderboardPlayer[];
         const { data, error } = await supabase
           .from('player')
-          .select('username, current_level, remaining_time')
+          .select('username, current_level, remaining_time, best_score')
+          .order('best_score', { ascending: false })
           .order('current_level', { ascending: false })
           .order('remaining_time', { ascending: false })
           .limit(10);
-        if (error) throw error;
-        setLeaderboardData(data || []);
+        if (error) {
+          setLeaderboardData(localScores);
+          return;
+        }
+        const merged = [...(data || []), ...localScores]
+          .sort((a, b) => (b.best_score || 0) - (a.best_score || 0) || (b.remaining_time || 0) - (a.remaining_time || 0))
+          .slice(0, 10);
+        setLeaderboardData(merged);
       } catch (err) {
         console.error("Failed to fetch leaderboard:", err);
+        setLeaderboardData(JSON.parse(localStorage.getItem("escapeRoomLocalLeaderboard") || "[]"));
       } finally {
         setLoadingLeaderboard(false);
       }
@@ -211,14 +228,17 @@ export default function IntroHome() {
        return;
     }
 
+    const existingEndTime = localStorage.getItem("escapeRoomEndTime");
+    if (!existingEndTime || parseInt(existingEndTime, 10) <= Date.now()) {
+       const GAME_DURATION = 30 * 60;
+       localStorage.setItem("escapeRoomEndTime", (Date.now() + GAME_DURATION * 1000).toString());
+    }
+
     if (level === 1) {
        // Snap to top to ensure clean zoom origin!
        window.scrollTo({ top: 0, behavior: 'smooth' });
        setIsZooming(true);
-       
-       const GAME_DURATION = 30 * 60; 
-       localStorage.setItem("escapeRoomEndTime", (Date.now() + GAME_DURATION * 1000).toString());
-       
+
        setTimeout(() => {
           router.push(`/level1`);
        }, 1600);
@@ -561,6 +581,7 @@ export default function IntroHome() {
                            <tr className="border-b border-[#5c4026] font-cinzel text-xs tracking-wider text-[#8c7a6b]">
                               <th className="py-3 px-2 text-center w-16">Rank</th>
                               <th className="py-3 px-4">Explorer</th>
+                              <th className="py-3 px-4 text-center">Score</th>
                               <th className="py-3 px-4 text-center">Highest Chamber</th>
                               <th className="py-3 px-4 text-center">Remaining Time</th>
                            </tr>
@@ -585,6 +606,9 @@ export default function IntroHome() {
                                     <td className={`py-4 px-4 font-bold flex items-center gap-2 ${isTop1 ? "text-[#ffedb3]" : ""}`}>
                                        {player.username || "Unknown"}
                                        {isTop1 && <Trophy size={16} className="text-[#d4af37]" />}
+                                    </td>
+                                    <td className="py-4 px-4 text-center font-cinzel text-[#d4af37]">
+                                       {player.best_score || 0}
                                     </td>
                                     <td className="py-4 px-4 text-center">
                                        Chamber {highestChamber}
