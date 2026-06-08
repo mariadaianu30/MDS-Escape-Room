@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useInventory } from "@/lib/InventoryContext";
 import CollectibleItem from "@/components/CollectibleItem";
+import { saveAccountProgress } from "@/lib/progress";
 
 // 1. MORSE_MAP și PUZZLES rămân aici (sunt constante, e ok să fie afară)
 const MORSE_MAP: Record<string, string> = {
@@ -147,7 +148,9 @@ export default function Level4Page() {
         if (puzzleIndex + 1 < PUZZLES.length) {
           setPuzzleIndex((i) => i + 1); setInput("");
         } else {
-          localStorage.setItem("escapeRoomCompletedLevel", "4"); setStage("complete");
+          localStorage.setItem("escapeRoomCompletedLevel", "4");
+          void saveAccountProgress(5);
+          setStage("complete");
         }
       }, 1800);
     } else {

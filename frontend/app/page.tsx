@@ -11,13 +11,16 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
 
+const GAME_DURATION = 30 * 60;
+
 const resetLocalGameSession = () => {
   Object.keys(localStorage)
     .filter((key) => key.startsWith("escapeRoomLevel"))
     .forEach((key) => localStorage.removeItem(key));
 
   localStorage.setItem("escapeRoomCompletedLevel", "0");
-  localStorage.setItem("escapeRoomEndTime", String(Date.now() + 30 * 60 * 1000));
+  localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+  localStorage.removeItem("escapeRoomTimeExpired");
   localStorage.removeItem("escapeRoomInventory");
   localStorage.removeItem("escapeRoomVictoryStats");
   localStorage.removeItem("escapeRoomRoomCode");
@@ -60,9 +63,11 @@ export default function AuthPage() {
       setLoginError(error.message);
       setIsLoggingIn(false);
     } else {
+      localStorage.removeItem("escapeRoomGuestMode");
       localStorage.removeItem("escapeRoomVictoryStats");
       localStorage.removeItem("escapeRoomInventory");
       localStorage.removeItem("escapeRoomRoomCode");
+      localStorage.removeItem("escapeRoomTimeExpired");
       router.push("/lobby");
     }
   };
@@ -108,6 +113,7 @@ export default function AuthPage() {
       if (authData.session) {
         // If email confirmation is disabled, session is returned immediately
         resetLocalGameSession();
+        localStorage.removeItem("escapeRoomGuestMode");
         router.push("/lobby");
       } else {
         // If email confirmation is enabled, session will be null
@@ -124,25 +130,31 @@ export default function AuthPage() {
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
+    setLoginError("");
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      localStorage.removeItem("escapeRoomGuestMode");
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/lobby`,
+          skipBrowserRedirect: true,
         }
       });
       if (error) throw error;
+      if (!data.url) throw new Error("Google login did not return a redirect URL.");
+      window.location.assign(data.url);
     } catch (error: any) {
       setLoginError(error.message || "An error occurred with Google login");
       setIsGoogleLoading(false);
     }
   };
 
-  const handleGuestStart = async () => {
-    await supabase.auth.signOut();
+  const handleGuestStart = () => {
+    localStorage.setItem("escapeRoomGuestMode", "1");
     resetLocalGameSession();
     localStorage.setItem("escapeRoomUsername", "Guest Explorer");
-    router.push("/lobby");
+    void supabase.auth.signOut();
+    window.location.assign("/lobby?guest=1");
   };
 
   return (
