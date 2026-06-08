@@ -21,6 +21,7 @@ export type PlayerRole = "scribe" | "artisan" | "oracle";
 
 interface InventoryContextType {
   items: InventoryItem[];
+  isLoaded: boolean;
   addItem: (item: InventoryItem) => void;
   removeItem: (id: string) => void;
   hasItem: (id: string) => boolean;
@@ -320,6 +321,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     <InventoryContext.Provider
       value={{
         items,
+        isLoaded,
         addItem,
         removeItem,
         hasItem,
