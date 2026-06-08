@@ -50,7 +50,7 @@ export function InspectionNarrator({ objects }: InspectionNarratorProps) {
 
   return (
     <>
-      <div className="fixed bottom-24 left-4 z-[70] flex max-w-[220px] flex-col gap-2 font-cinzel">
+      {/* <div className="fixed bottom-24 left-4 z-[70] flex max-w-[220px] flex-col gap-2 font-cinzel">
         {objects.map((object) => (
           <button
             key={object.id}
@@ -62,7 +62,7 @@ export function InspectionNarrator({ objects }: InspectionNarratorProps) {
             <span className="truncate">{object.label}</span>
           </button>
         ))}
-      </div>
+      </div> */}
 
       {active && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 font-cormorant">
