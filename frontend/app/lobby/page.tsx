@@ -926,24 +926,24 @@ export default function IntroHome() {
 
       {/* 5. Rules & Lore Modal overlay (Anchored fixed above everything!) */}
       {showRules && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
-            <div className="relative max-w-3xl w-full mx-auto bg-[#150e09] border-[3px] border-[#d4af37] p-10 md:p-16 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')]">
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4 py-8">
+            <div className="relative max-w-3xl w-full mx-auto max-h-[90vh] overflow-y-auto bg-[#150e09] border-[3px] border-[#d4af37] p-6 md:p-10 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')]">
                
                <button 
                   onClick={() => setShowRules(false)}
-                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-10 h-10 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-xl font-bold transition-all rounded"
                >
                   X
                </button>
 
-               <h2 className="font-cinzel text-4xl md:text-5xl text-[#d4af37] mb-8 text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold">How to Play</h2>
+               <h2 className="font-cinzel text-3xl md:text-4xl text-[#d4af37] mb-6 text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold">How to Play</h2>
                
-               <div className="space-y-6 text-[#e5d8b3] font-cormorant text-xl md:text-2xl leading-relaxed">
-                  <p className="italic border-b-2 border-[#5c4026] pb-8 text-center md:px-8">
+               <div className="space-y-4 text-[#e5d8b3] font-cormorant text-lg md:text-xl leading-relaxed">
+                  <p className="italic border-b-2 border-[#5c4026] pb-6 text-center md:px-8">
                      "You have been trapped deep inside the ancient catacombs. Five archaic rooms block your path to salvation. Solve the mechanical riddles hidden within each chamber, or the walls will forever seal your fate."
                   </p>
                   
-                  <ul className="list-disc pl-6 md:pl-8 pt-4 space-y-4 marker:text-[#d4af37]">
+                  <ul className="list-disc pl-6 md:pl-8 pt-2 space-y-3 marker:text-[#d4af37]">
                      <li><strong>5 Chambers:</strong> Proceed in order to unlock deeper rooms.</li>
                      <li><strong>The Vault Clock:</strong> You possess merely <span className="text-red-400 font-bold tracking-wider">30 Minutes</span> of absolute global timeline across the entire game.</li>
                      <li><strong>The Mechanism Tolerance:</strong> Attempting to force an incorrect combination will jam the gears. You have a maximum of <span className="text-red-400 font-bold tracking-wider">3 Mistakes</span> per room before the puzzle abruptly resets.</li>
@@ -1243,17 +1243,23 @@ export default function IntroHome() {
                <div className="space-y-8 text-[#e5d8b3]">
                   {/* Progress Block */}
                   <div className="space-y-4">
-                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Adventure Journal</h3>
+                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Player Statistics</h3>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
-                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Chambers Conquered</p>
-                           <p className="text-2xl font-bold">{completedLevel} / 5 Floors</p>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Best Score</p>
+                           <p className="text-3xl font-bold text-[#d4af37]">{userProfile.best_score || 0}</p>
                         </div>
-                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
-                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Current Standing</p>
-                           <p className="text-2xl font-bold text-[#d4af37]">
-                              {isAccountRunExpired ? "Run Expired" : `Chamber ${Math.min(completedLevel + 1, 5)}`}
-                           </p>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Chambers Conquered</p>
+                           <p className="text-3xl font-bold">{completedLevel} / 5</p>
+                        </div>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Singleplayer Runs</p>
+                           <p className="text-3xl font-bold">0</p>
+                        </div>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Multiplayer Runs</p>
+                           <p className="text-3xl font-bold">0</p>
                         </div>
                      </div>
                   </div>
@@ -1263,53 +1269,9 @@ export default function IntroHome() {
                            disabled={isRestartingRun}
                            className="w-full rounded-lg border-2 border-red-800 bg-red-950/40 px-5 py-4 text-red-300 transition-colors hover:border-red-500 hover:bg-red-900/60 disabled:cursor-wait disabled:opacity-60"
                         >
-                           {isRestartingRun ? "Restarting Run..." : "Restart From Chamber I"}
+                           {isRestartingRun ? "Restarting Run..." : "Restart Run (Time Expired)"}
                         </button>
                      )}
-
-                  {/* Account Run Records */}
-                  <div className="space-y-4">
-                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Account Run Records</h3>
-                     <div className="space-y-3">
-                        {completedLevel === 0 && !isAccountRunExpired ? (
-                           <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg text-center">
-                              <p className="font-cormorant text-lg italic text-[#c7baaa]">No chambers completed on this account yet.</p>
-                           </div>
-                        ) : (
-                           <>
-                              {LABELS.slice(0, completedLevel).map((label, index) => (
-                                 <div key={label} className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div>
-                                       <p className="text-lg font-bold text-[#ffedb3]">Chamber {index + 1}: {label}</p>
-                                       <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Saved from this account's progress</p>
-                                    </div>
-                                    <div className="text-right">
-                                       <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
-                                          COMPLETED
-                                       </span>
-                                    </div>
-                                 </div>
-                              ))}
-                              {isAccountRunExpired && (
-                                 <div className="p-4 bg-red-950/30 border border-red-900 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div>
-                                       <p className="text-lg font-bold text-red-200">Current Run</p>
-                                       <p className="text-xs text-red-300/70 tracking-wider uppercase mt-0.5">Timer saved as expired in your account</p>
-                                    </div>
-                                    <span className="px-3 py-1 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs font-mono font-bold tracking-widest">
-                                       TIME EXPIRED
-                                    </span>
-                                 </div>
-                              )}
-                           </>
-                        )}
-                     </div>
-                  </div>
-
-                  {/* Footnote */}
-                  <p className="text-center font-cormorant italic text-sm text-[#8c7a6b] pt-4">
-                     "These records are read from your current account and local guest run, not from sample data."
-                  </p>
                </div>
 
             </div>

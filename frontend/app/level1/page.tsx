@@ -396,7 +396,7 @@ export default function Level1() {
 
       {/* Timer is now rendered in layout.tsx globally */}
 
-      <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-12 md:gap-24 overflow-hidden mt-6">
+      <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-6 md:gap-12 overflow-hidden mt-6">
         <InspectionNarrator
           objects={[
             { id: "library", label: "Library Shelves", level: 1 },
@@ -406,7 +406,7 @@ export default function Level1() {
         />
 
         {/* Central Desk Area - Sudoku */}
-        <div className="flex flex-col items-center justify-center w-full max-w-xl xl:max-w-2xl relative shrink-0 translate-x-6 md:translate-x-12 xl:translate-x-20 z-20">
+        <div className="flex flex-col items-center justify-center w-full max-w-lg xl:max-w-xl relative shrink-0 z-20">
           <div className="relative p-6 md:p-10 w-full flex flex-col items-center justify-center rounded-2xl shadow-2xl"
             style={{
               backgroundImage: 'url(/images/desk.png)',
