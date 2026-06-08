@@ -7,6 +7,12 @@ import CollectibleItem from "@/components/CollectibleItem";
 import { InspectionNarrator } from "@/components/InspectionNarrator";
 import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import confetti from "canvas-confetti";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.NEXT_PUBLIC_SUPABASE_KEY || ""
+);
 
 const RELIC_LION = { id: "relic_lion", name: "Stone Lion", description: "The oldest relic stone, badly eroded around the lion seal.", iconSrc: "/images/relic_lion_aged_cutout.png" };
 const RELIC_CROSS = { id: "relic_cross", name: "Stone Cross", description: "An old cracked relic stone marked with a cross.", iconSrc: "/images/relic_cross_aged_cutout.png" };
@@ -148,6 +154,14 @@ type VictoryStats = {
   elapsedSeconds: number;
   remainingSeconds: number;
   score: number;
+};
+
+type LocalLeaderboardEntry = {
+  username: string;
+  current_level: number;
+  remaining_time: number;
+  best_score: number;
+  completed_at: string;
 };
 
 export default function Level5Page() {
@@ -334,6 +348,50 @@ export default function Level5Page() {
     ringRotations.length === RING_TARGETS.length && (ringRotations[index] ?? 0) % 360 === target
   );
 
+  const saveLeaderboardScore = async (stats: VictoryStats) => {
+    const completedAt = new Date().toISOString();
+    const localEntry: LocalLeaderboardEntry = {
+      username: localStorage.getItem("escapeRoomUsername") || "Guest Explorer",
+      current_level: 5,
+      remaining_time: stats.remainingSeconds,
+      best_score: stats.score,
+      completed_at: completedAt,
+    };
+
+    const localScores = JSON.parse(localStorage.getItem("escapeRoomLocalLeaderboard") || "[]") as LocalLeaderboardEntry[];
+    localStorage.setItem(
+      "escapeRoomLocalLeaderboard",
+      JSON.stringify([localEntry, ...localScores].sort((a, b) => b.best_score - a.best_score).slice(0, 10))
+    );
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) return;
+
+      const { data: player } = await supabase
+        .from("player")
+        .select("best_score, username")
+        .eq("id", authData.user.id)
+        .single();
+
+      const bestScore = Math.max(player?.best_score || 0, stats.score);
+      const { error } = await supabase
+        .from("player")
+        .update({
+          current_level: 5,
+          remaining_time: stats.remainingSeconds,
+          best_score: bestScore,
+        })
+        .eq("id", authData.user.id);
+
+      if (error) {
+        console.error("Failed to save leaderboard score:", error);
+      }
+    } catch (error) {
+      console.error("Failed to save leaderboard score:", error);
+    }
+  };
+
   const completeEscapeRoom = () => {
     const remainingSeconds = Math.max(0, timeLeft);
     const elapsedSeconds = GAME_DURATION - remainingSeconds;
@@ -344,6 +402,7 @@ export default function Level5Page() {
     localStorage.setItem("escapeRoomVictoryStats", JSON.stringify(stats));
     localStorage.removeItem("escapeRoomEndTime");
     setVictoryStats(stats);
+    void saveLeaderboardScore(stats);
 
     confetti({
       particleCount: 220,

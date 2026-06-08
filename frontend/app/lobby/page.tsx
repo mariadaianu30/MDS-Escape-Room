@@ -12,6 +12,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 )
+
+const GAME_DURATION = 30 * 60;
 // Floating dust motes — purely decorative
 const DustMote = ({ style }: { style: React.CSSProperties }) => (
   <div className="mote" style={style} />
@@ -34,6 +36,33 @@ const LABELS = [
   "The Final Chamber"
 ];
 
+type LeaderboardPlayer = {
+  username: string;
+  current_level: number;
+  remaining_time: number;
+  best_score: number;
+  completed_at?: string;
+};
+
+const completedFromPlayer = (player?: { current_level?: number; best_score?: number } | null) => {
+  if (!player) return 0;
+  if ((player.best_score || 0) > 0) return 5;
+  return Math.max(0, (player.current_level || 1) - 1);
+};
+
+const clearRunStorage = () => {
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith("escapeRoomLevel"))
+    .forEach((key) => localStorage.removeItem(key));
+
+  localStorage.setItem("escapeRoomCompletedLevel", "0");
+  localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+  localStorage.removeItem("escapeRoomTimeExpired");
+  localStorage.removeItem("escapeRoomInventory");
+  localStorage.removeItem("escapeRoomVictoryStats");
+  localStorage.removeItem("escapeRoomRoomCode");
+};
+
 const PLAYER_ROLES: { id: PlayerRole; title: string; description: string }[] = [
   { id: "scribe", title: "Scribe", description: "Sees written clues, wall text, and cipher notes." },
   { id: "artisan", title: "Artisan", description: "Operates locks, input panels, and puzzle controls." },
@@ -52,6 +81,7 @@ export default function IntroHome() {
     email: string;
     current_level: number;
     remaining_time: number;
+    best_score: number;
   } | null>(null);
 
   const [completedLevel, setCompletedLevel] = useState(0);
@@ -63,8 +93,10 @@ export default function IntroHome() {
   const [shakingDoor, setShakingDoor] = useState<number | null>(null);
   const [isGameOver, setIsGameOver] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardPlayer[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [isAccountRunExpired, setIsAccountRunExpired] = useState(false);
+  const [isRestartingRun, setIsRestartingRun] = useState(false);
 
   const formatTime = (seconds: number) => {
     if (!seconds && seconds !== 0) return "30:00";
@@ -78,16 +110,25 @@ export default function IntroHome() {
     const fetchLeaderboard = async () => {
       setLoadingLeaderboard(true);
       try {
+        const localScores = JSON.parse(localStorage.getItem("escapeRoomLocalLeaderboard") || "[]") as LeaderboardPlayer[];
         const { data, error } = await supabase
           .from('player')
-          .select('username, current_level, remaining_time')
+          .select('username, current_level, remaining_time, best_score')
+          .order('best_score', { ascending: false })
           .order('current_level', { ascending: false })
           .order('remaining_time', { ascending: false })
           .limit(10);
-        if (error) throw error;
-        setLeaderboardData(data || []);
+        if (error) {
+          setLeaderboardData(localScores);
+          return;
+        }
+        const merged = [...(data || []), ...localScores]
+          .sort((a, b) => (b.best_score || 0) - (a.best_score || 0) || (b.remaining_time || 0) - (a.remaining_time || 0))
+          .slice(0, 10);
+        setLeaderboardData(merged);
       } catch (err) {
         console.error("Failed to fetch leaderboard:", err);
+        setLeaderboardData(JSON.parse(localStorage.getItem("escapeRoomLocalLeaderboard") || "[]"));
       } finally {
         setLoadingLeaderboard(false);
       }
@@ -100,7 +141,12 @@ export default function IntroHome() {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('gameover') === 'time') {
         setIsGameOver(true);
+        setIsAccountRunExpired(true);
         // Remove param from URL
+        window.history.replaceState({}, '', '/lobby');
+      }
+      if (urlParams.get('guest') === '1') {
+        localStorage.setItem("escapeRoomGuestMode", "1");
         window.history.replaceState({}, '', '/lobby');
       }
     }
@@ -172,9 +218,7 @@ export default function IntroHome() {
     document.head.appendChild(style);
     
     const comp = localStorage.getItem("escapeRoomCompletedLevel");
-    if (comp) {
-       setCompletedLevel(parseInt(comp, 10));
-    }
+    if (comp) setCompletedLevel(parseInt(comp, 10));
 
     return () => {
       document.head.removeChild(style);
@@ -183,33 +227,102 @@ export default function IntroHome() {
 
   useEffect(() => {
     const fetchSession = async () => {
+      const isGuestMode = localStorage.getItem("escapeRoomGuestMode") === "1";
+      if (isGuestMode) {
+        const guestCompletedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
+        const endTime = parseInt(localStorage.getItem("escapeRoomEndTime") || "0", 10);
+        const expired = localStorage.getItem("escapeRoomTimeExpired") === "1" || (!!endTime && endTime <= Date.now());
+        setCompletedLevel(guestCompletedLevel);
+        setIsAccountRunExpired(expired);
+        setUserProfile({
+          username: 'Guest Explorer',
+          email: 'guest session',
+          current_level: guestCompletedLevel + 1,
+          remaining_time: expired ? 0 : Math.max(0, Math.floor((endTime - Date.now()) / 1000)) || GAME_DURATION,
+          best_score: 0
+        });
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         const { data: player } = await supabase
           .from('player')
-          .select('username, current_level, remaining_time')
+          .select('username, current_level, remaining_time, best_score')
           .eq('id', session.user.id)
           .single();
+
+        const accountCompletedLevel = completedFromPlayer(player);
+        const accountRemainingTime = player?.remaining_time ?? 1800;
+        const expired = accountRemainingTime <= 0;
+        localStorage.setItem("escapeRoomCompletedLevel", String(accountCompletedLevel));
+        localStorage.setItem("escapeRoomEndTime", String(Date.now() + Math.max(0, accountRemainingTime) * 1000));
+        if (expired) localStorage.setItem("escapeRoomTimeExpired", "1");
+        else localStorage.removeItem("escapeRoomTimeExpired");
+        setCompletedLevel(accountCompletedLevel);
+        setIsAccountRunExpired(expired);
         
         setUserProfile({
           username: player?.username || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
           email: session.user.email || '',
           current_level: player?.current_level || 1,
-          remaining_time: player?.remaining_time || 1800
+          remaining_time: accountRemainingTime,
+          best_score: player?.best_score || 0
         });
       } else {
+        const guestCompletedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
+        const endTime = parseInt(localStorage.getItem("escapeRoomEndTime") || "0", 10);
+        const expired = localStorage.getItem("escapeRoomTimeExpired") === "1" || (!!endTime && endTime <= Date.now());
+        setCompletedLevel(guestCompletedLevel);
+        setIsAccountRunExpired(expired);
         setUserProfile({
           username: 'Anonymous Explorer',
           email: 'anonymous@catacombs.io',
-          current_level: completedLevel + 1,
-          remaining_time: 1800
+          current_level: guestCompletedLevel + 1,
+          remaining_time: expired ? 0 : Math.max(0, Math.floor((endTime - Date.now()) / 1000)) || GAME_DURATION,
+          best_score: 0
         });
       }
     };
     fetchSession();
-  }, [completedLevel]);
+  }, []);
+
+  const restartRun = async () => {
+    setIsRestartingRun(true);
+    clearRunStorage();
+
+    try {
+      const isGuestMode = localStorage.getItem("escapeRoomGuestMode") === "1";
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user && !isGuestMode) {
+        const { error } = await supabase
+          .from("player")
+          .update({ current_level: 1, remaining_time: GAME_DURATION })
+          .eq("id", session.user.id);
+        if (error) throw error;
+      }
+
+      setCompletedLevel(0);
+      setIsGameOver(false);
+      setIsAccountRunExpired(false);
+      setUserProfile((profile) => profile ? {
+        ...profile,
+        current_level: 1,
+        remaining_time: GAME_DURATION
+      } : profile);
+    } catch (error) {
+      console.error("Failed to restart run:", error);
+    } finally {
+      setIsRestartingRun(false);
+    }
+  };
 
   const attemptEnterDoor = (level: number) => {
+    if (isAccountRunExpired) {
+       setIsGameOver(true);
+       return;
+    }
+
     const isUnlocked = level === 1 || completedLevel >= level - 1;
     if (!isUnlocked) {
        setShakingDoor(level);
@@ -217,14 +330,19 @@ export default function IntroHome() {
        return;
     }
 
+    const existingEndTime = localStorage.getItem("escapeRoomEndTime");
+    if (!existingEndTime || parseInt(existingEndTime, 10) <= Date.now()) {
+       setIsAccountRunExpired(true);
+       setIsGameOver(true);
+       localStorage.setItem("escapeRoomTimeExpired", "1");
+       return;
+    }
+
     if (level === 1) {
        // Snap to top to ensure clean zoom origin!
        window.scrollTo({ top: 0, behavior: 'smooth' });
        setIsZooming(true);
-       
-       const GAME_DURATION = 30 * 60; 
-       localStorage.setItem("escapeRoomEndTime", (Date.now() + GAME_DURATION * 1000).toString());
-       
+
        setTimeout(() => {
           router.push(`/level1`);
        }, 1600);
@@ -403,7 +521,7 @@ export default function IntroHome() {
             
             {/* Draw mapping of 5 doors strictly rendered one below another! */}
             {[1, 2, 3, 4, 5].map((level) => {
-               const isUnlocked = level === 1 || completedLevel >= level - 1;
+               const isUnlocked = !isAccountRunExpired && (level === 1 || completedLevel >= level - 1);
                const isCompleted = completedLevel >= level;
                const isHoverMain = level === 1 && !isCompleted;
                const isShaking = shakingDoor === level;
@@ -482,7 +600,7 @@ export default function IntroHome() {
                               {/* Hover tooltip for locked doors */}
                               {!isUnlocked && (
                                  <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[220px] bg-[#1a1107] border border-red-900 text-red-400 text-sm px-4 py-2 rounded opacity-0 group-hover/lock:opacity-100 transition-opacity font-cormorant text-center pointer-events-none">
-                                    Complete the previous level to unlock
+                                    {isAccountRunExpired ? "Time expired. Restart from your account." : "Complete the previous level to unlock"}
                                  </div>
                               )}
                            </div>
@@ -498,10 +616,15 @@ export default function IntroHome() {
          {/* 4. Bottom Play Button Container (Anchored at very bottom sequence) */}
          <div className={`w-full flex justify-center pb-24 transition-opacity duration-1000 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
             <button 
-               onClick={() => attemptEnterDoor(Math.min(completedLevel + 1, 5))}
-               className="font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] px-16 py-6 rounded-xl shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] hover:scale-105 active:scale-95 transition-all duration-300 uppercase animate-pulse border-4 border-white/50"
+               onClick={() => isAccountRunExpired ? restartRun() : attemptEnterDoor(Math.min(completedLevel + 1, 5))}
+               disabled={isRestartingRun}
+               className={`font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 uppercase border-4 border-white/50 disabled:opacity-60 disabled:cursor-wait
+                  ${isAccountRunExpired
+                    ? "bg-[radial-gradient(ellipse_at_center,_#ffb3b3_0%,_#a72626_100%)] shadow-[0_0_100px_rgba(180,30,30,0.8)]"
+                    : "bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] animate-pulse"
+                  }`}
             >
-               {completedLevel > 0 ? `Resume (Ch1-${Math.min(completedLevel + 1, 5)})` : "Play"}
+               {isRestartingRun ? "Restarting..." : isAccountRunExpired ? "Restart Run" : completedLevel > 0 ? `Resume (Ch1-${Math.min(completedLevel + 1, 5)})` : "Play"}
             </button>
          </div>
 
@@ -572,6 +695,7 @@ export default function IntroHome() {
                            <tr className="border-b border-[#5c4026] font-cinzel text-xs tracking-wider text-[#8c7a6b]">
                               <th className="py-3 px-2 text-center w-16">Rank</th>
                               <th className="py-3 px-4">Explorer</th>
+                              <th className="py-3 px-4 text-center">Score</th>
                               <th className="py-3 px-4 text-center">Highest Chamber</th>
                               <th className="py-3 px-4 text-center">Remaining Time</th>
                            </tr>
@@ -596,6 +720,9 @@ export default function IntroHome() {
                                     <td className={`py-4 px-4 font-bold flex items-center gap-2 ${isTop1 ? "text-[#ffedb3]" : ""}`}>
                                        {player.username || "Unknown"}
                                        {isTop1 && <Trophy size={16} className="text-[#d4af37]" />}
+                                    </td>
+                                    <td className="py-4 px-4 text-center font-cinzel text-[#d4af37]">
+                                       {player.best_score || 0}
                                     </td>
                                     <td className="py-4 px-4 text-center">
                                        Chamber {highestChamber}
@@ -767,56 +894,64 @@ export default function IntroHome() {
                         </div>
                         <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
                            <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Current Standing</p>
-                           <p className="text-2xl font-bold text-[#d4af37]">Chamber {completedLevel + 1}</p>
+                           <p className="text-2xl font-bold text-[#d4af37]">
+                              {isAccountRunExpired ? "Run Expired" : `Chamber ${Math.min(completedLevel + 1, 5)}`}
+                           </p>
                         </div>
                      </div>
                   </div>
+                     {isAccountRunExpired && (
+                        <button
+                           onClick={restartRun}
+                           disabled={isRestartingRun}
+                           className="w-full rounded-lg border-2 border-red-800 bg-red-950/40 px-5 py-4 text-red-300 transition-colors hover:border-red-500 hover:bg-red-900/60 disabled:cursor-wait disabled:opacity-60"
+                        >
+                           {isRestartingRun ? "Restarting Run..." : "Restart From Chamber I"}
+                        </button>
+                     )}
 
-                  {/* Team Chronicles & Sprints */}
+                  {/* Account Run Records */}
                   <div className="space-y-4">
-                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Co-Op Campaign Records</h3>
+                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Account Run Records</h3>
                      <div className="space-y-3">
-                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-                           <div>
-                              <p className="text-lg font-bold text-[#ffedb3]">Chamber I: The Library</p>
-                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Ionel, Vlad, Pupăză, Dăianu</p>
+                        {completedLevel === 0 && !isAccountRunExpired ? (
+                           <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg text-center">
+                              <p className="font-cormorant text-lg italic text-[#c7baaa]">No chambers completed on this account yet.</p>
                            </div>
-                           <div className="text-right">
-                              <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
-                                 14m 20s · ESCAPED
-                              </span>
-                           </div>
-                        </div>
-
-                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-                           <div>
-                              <p className="text-lg font-bold text-[#ffedb3]">Chamber II: The Alchemist's Lab</p>
-                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Ionel, Dăianu</p>
-                           </div>
-                           <div className="text-right">
-                              <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
-                                 21m 45s · ESCAPED
-                              </span>
-                           </div>
-                        </div>
-
-                        <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 opacity-60 hover:opacity-100 transition-opacity">
-                           <div>
-                              <p className="text-lg font-bold text-[#ffedb3]">Chamber III: The Tower</p>
-                              <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Team: Co-Op Squad</p>
-                           </div>
-                           <div className="text-right">
-                              <span className="px-3 py-1 bg-red-950/40 border border-red-900 text-red-400 rounded text-xs font-mono font-bold tracking-widest">
-                                 FAILED · TIME EXPIRED
-                              </span>
-                           </div>
-                        </div>
+                        ) : (
+                           <>
+                              {LABELS.slice(0, completedLevel).map((label, index) => (
+                                 <div key={label} className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div>
+                                       <p className="text-lg font-bold text-[#ffedb3]">Chamber {index + 1}: {label}</p>
+                                       <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Saved from this account's progress</p>
+                                    </div>
+                                    <div className="text-right">
+                                       <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
+                                          COMPLETED
+                                       </span>
+                                    </div>
+                                 </div>
+                              ))}
+                              {isAccountRunExpired && (
+                                 <div className="p-4 bg-red-950/30 border border-red-900 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div>
+                                       <p className="text-lg font-bold text-red-200">Current Run</p>
+                                       <p className="text-xs text-red-300/70 tracking-wider uppercase mt-0.5">Timer saved as expired in your account</p>
+                                    </div>
+                                    <span className="px-3 py-1 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs font-mono font-bold tracking-widest">
+                                       TIME EXPIRED
+                                    </span>
+                                 </div>
+                              )}
+                           </>
+                        )}
                      </div>
                   </div>
 
                   {/* Footnote */}
                   <p className="text-center font-cormorant italic text-sm text-[#8c7a6b] pt-4">
-                     "The ancient records are bound in stone, detailing the path you and your compatriots have walked."
+                     "These records are read from your current account and local guest run, not from sample data."
                   </p>
                </div>
 
@@ -833,13 +968,14 @@ export default function IntroHome() {
             <p className="text-2xl text-red-300 mb-8 font-cormorant leading-relaxed">
               The 30 minutes have passed. The heavy stone doors grind shut forever, sealing you in the darkness.
               <br /><br />
-              The ancient magic resets the labyrinth...
+              Restart this run from your account to enter Chamber I again.
             </p>
             <button 
-              onClick={() => setIsGameOver(false)}
+              onClick={restartRun}
+              disabled={isRestartingRun}
               className="text-xl text-[#0a0705] bg-red-800 hover:bg-red-500 transition-colors font-cinzel font-bold px-8 py-3 rounded uppercase tracking-widest"
             >
-              Accept Fate
+              {isRestartingRun ? "Restarting..." : "Restart Run"}
             </button>
           </div>
         </div>

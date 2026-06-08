@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GameStage, BlankId, FragmentWord, PipeType, PipeCell } from "@/types/level2";
 import CollectibleItem from "@/components/CollectibleItem";
 import { useInventory } from "@/lib/InventoryContext";
+import { saveAccountProgress } from "@/lib/progress";
 import { InspectionNarrator } from "@/components/InspectionNarrator";
 import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 
@@ -701,9 +702,10 @@ export default function Level2() {
           Au · ☉ · DISTILL<br/><br/>
           The journal seals itself. The laboratory door groans open.
         </div>
-        <button onClick={() => {
+        <button onClick={async () => {
             const completed = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
             if (completed < 2) localStorage.setItem("escapeRoomCompletedLevel", "2");
+            await saveAccountProgress(3);
             router.push('/level3');
           }}
           className="mt-12 font-cinzel px-8 py-3 border border-[#d4a017] text-[#d4a017] hover:bg-[#d4a017] hover:text-black transition-colors uppercase tracking-widest">

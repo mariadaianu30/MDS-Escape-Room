@@ -7,6 +7,7 @@ import CollectibleItem from "@/components/CollectibleItem";
 import { InspectionNarrator } from "@/components/InspectionNarrator";
 import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import confetti from "canvas-confetti";
+import { saveAccountProgress } from "@/lib/progress";
 
 const GAME_DURATION = 30 * 60;
 
@@ -377,6 +378,7 @@ export default function Level3() {
         // WIN!
         const savedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
         if (savedLevel < 3) localStorage.setItem("escapeRoomCompletedLevel", "3");
+        void saveAccountProgress(4);
         confetti({ particleCount: 200, spread: 160, origin: { y: 0.5 }, colors: ["#b8d4f0", "#d4af37", "#ffffff"] });
         setTimeout(() => setShowLevelComplete(true), 1800);
       } else {

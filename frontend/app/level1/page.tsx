@@ -11,6 +11,7 @@ import { useInventory } from "@/lib/InventoryContext";
 import { InspectionNarrator } from "@/components/InspectionNarrator";
 import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import { createClient } from '@supabase/supabase-js'
+import { saveAccountProgress } from "@/lib/progress";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -133,6 +134,7 @@ export default function Level1() {
     if (savedLevel < 1) {
       localStorage.setItem("escapeRoomCompletedLevel", "1");
     }
+    await saveAccountProgress(2);
 
     broadcastRoomEvent("DOOR_UNLOCKED", { code: extractedCode || "7391" });
 
