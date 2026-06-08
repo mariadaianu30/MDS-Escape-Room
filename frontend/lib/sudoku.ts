@@ -1,8 +1,24 @@
 type Grid = number[][];
 
-const shuffle = (array: number[]) => {
+const createSeededRandom = (seed: string) => {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return () => {
+    hash += 0x6D2B79F5;
+    let t = hash;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const shuffle = (array: number[], random = Math.random) => {
   for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [array[i], array[j]] = [array[j], array[i]];
   }
 };
@@ -24,16 +40,16 @@ const isValid = (grid: Grid, row: number, col: number, num: number) => {
   return true;
 };
 
-const fillGrid = (grid: Grid): boolean => {
+const fillGrid = (grid: Grid, random = Math.random): boolean => {
   for (let row = 0; row < 9; row++) {
     for (let col = 0; col < 9; col++) {
       if (grid[row][col] === 0) {
         const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-        shuffle(nums);
+        shuffle(nums, random);
         for (const num of nums) {
           if (isValid(grid, row, col, num)) {
             grid[row][col] = num;
-            if (fillGrid(grid)) return true;
+            if (fillGrid(grid, random)) return true;
             grid[row][col] = 0;
           }
         }
@@ -75,10 +91,12 @@ const countSolutions = (grid: Grid, count = 0): number => {
   return count;
 };
 
-export const generateSudoku = () => {
+export const generateSudoku = (seed?: string) => {
+  const random = seed ? createSeededRandom(seed) : Math.random;
+
   // Generate complete valid board
   const solution: Grid = Array(9).fill(null).map(() => Array(9).fill(0));
-  fillGrid(solution);
+  fillGrid(solution, random);
 
   // Copy to create puzzle
   const puzzle: Grid = solution.map(row => [...row]);
@@ -86,8 +104,8 @@ export const generateSudoku = () => {
   // Dig holes (remove numbers) to create puzzle
   let attempts = 45; 
   while (attempts > 0) {
-    const row = Math.floor(Math.random() * 9);
-    const col = Math.floor(Math.random() * 9);
+    const row = Math.floor(random() * 9);
+    const col = Math.floor(random() * 9);
     
     if (puzzle[row][col] !== 0) {
       const backup = puzzle[row][col];

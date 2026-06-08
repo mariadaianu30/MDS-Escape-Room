@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SudokuGrid from "@/components/SudokuGrid";
 import CombinationLock from "@/components/CombinationLock";
@@ -12,6 +12,7 @@ import { InspectionNarrator } from "@/components/InspectionNarrator";
 import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import { createClient } from '@supabase/supabase-js'
 import { saveAccountProgress } from "@/lib/progress";
+import { generateSudoku } from "@/lib/sudoku";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,10 +20,12 @@ const supabase = createClient(
 )
 
 const GAME_DURATION = 30 * 60;
+type SudokuGridState = number[][];
+const cloneGrid = (grid: SudokuGridState) => grid.map((row) => [...row]);
 
 export default function Level1() {
   const router = useRouter();
-  const { hasItem, items, equippedItem, setEquippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const { hasItem, items, equippedItem, setEquippedItem, removeItem, roomCode, onRoomEvent, broadcastRoomEvent } = useInventory();
   const { isArtisan, isScribe } = useRoleAccess();
   const hasCompass = hasItem("brass_compass_lvl1");
   const hasEraser = hasItem("chalk_eraser_lvl1");
@@ -33,17 +36,102 @@ export default function Level1() {
   const [isBlackboardCleaned, setIsBlackboardCleaned] = useState(false);
   const [isLockUnjammed, setIsLockUnjammed] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const sharedSudoku = useMemo(
+    () => generateSudoku(roomCode ? `room:${roomCode}:level1:sudoku:${gameId}` : undefined),
+    [roomCode, gameId]
+  );
+  const [sudokuUserGrid, setSudokuUserGrid] = useState<SudokuGridState | null>(null);
+  const [sudokuMistakes, setSudokuMistakes] = useState(0);
+  const [isSudokuCompleted, setIsSudokuCompleted] = useState(false);
+  const latestStateRef = useRef<any>(null);
+  const latestSudokuGridRef = useRef<SudokuGridState | null>(null);
   
   const showNotification = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
   };
 
+  useEffect(() => {
+    setSudokuUserGrid(cloneGrid(sharedSudoku.puzzle));
+    latestSudokuGridRef.current = cloneGrid(sharedSudoku.puzzle);
+    setSudokuMistakes(0);
+    setIsSudokuCompleted(false);
+  }, [sharedSudoku]);
+
+  useEffect(() => {
+    latestStateRef.current = {
+      blackboardCleaned: isBlackboardCleaned,
+      lockUnjammed: isLockUnjammed,
+      doorUnlocked: isUnlocked,
+      extractedCode,
+      sudokuGrid: sudokuUserGrid,
+      sudokuMistakes,
+      sudokuCompleted: isSudokuCompleted,
+    };
+  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted]);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    const requestTimer = window.setTimeout(() => {
+      broadcastRoomEvent("LEVEL1_STATE_REQUEST", {});
+    }, 600);
+    return () => window.clearTimeout(requestTimer);
+    // Request room state only when entering or changing multiplayer room.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode]);
+
   // Game Over states
   const [isGameOver, setIsGameOver] = useState(false);
 
   // Real-time Multiplayer Sync for Room States
   useEffect(() => {
+    const unsubStateRequest = onRoomEvent("LEVEL1_STATE_REQUEST", () => {
+      if (latestStateRef.current) {
+        broadcastRoomEvent("LEVEL1_STATE_SYNC", latestStateRef.current);
+      }
+    });
+    const unsubStateSync = onRoomEvent("LEVEL1_STATE_SYNC", (payload: any) => {
+      if (!payload) return;
+      if (typeof payload.blackboardCleaned === "boolean") setIsBlackboardCleaned(payload.blackboardCleaned);
+      if (typeof payload.lockUnjammed === "boolean") setIsLockUnjammed(payload.lockUnjammed);
+      if (typeof payload.doorUnlocked === "boolean") setIsUnlocked(payload.doorUnlocked);
+      if (typeof payload.extractedCode === "string") setExtractedCode(payload.extractedCode);
+      if (Array.isArray(payload.sudokuGrid)) {
+        latestSudokuGridRef.current = payload.sudokuGrid;
+        setSudokuUserGrid(payload.sudokuGrid);
+      }
+      if (typeof payload.sudokuMistakes === "number") setSudokuMistakes(payload.sudokuMistakes);
+      if (typeof payload.sudokuCompleted === "boolean") setIsSudokuCompleted(payload.sudokuCompleted);
+    });
+    const unsubSudokuMove = onRoomEvent("SUDOKU_MOVE_LVL1", (payload: any) => {
+      if (Array.isArray(payload?.grid)) {
+        latestSudokuGridRef.current = payload.grid;
+        setSudokuUserGrid(payload.grid);
+      }
+    });
+    const unsubSudokuMistake = onRoomEvent("SUDOKU_MISTAKE_LVL1", (payload: any) => {
+      if (typeof payload?.mistakes === "number") {
+        setSudokuMistakes(payload.mistakes);
+        if (payload.mistakes >= 3) {
+          handleMistakesGameOver(false);
+        }
+      }
+    });
+    const unsubSudokuSolved = onRoomEvent("SUDOKU_SOLVED_LVL1", (payload: any) => {
+      if (Array.isArray(payload?.grid)) {
+        latestSudokuGridRef.current = payload.grid;
+        setSudokuUserGrid(payload.grid);
+      }
+      if (typeof payload?.code === "string") {
+        handleSudokuSolved(payload.code, false);
+      }
+      setIsSudokuCompleted(true);
+      showNotification("The Artisan solved the cipher grid.");
+    });
+    const unsubSudokuReset = onRoomEvent("SUDOKU_RESET_LVL1", () => {
+      setIsGameOver(true);
+      setTimeout(() => restartGame(false), 4000);
+    });
     const unsubClean = onRoomEvent("BLACKBOARD_CLEANED", () => {
       setIsBlackboardCleaned(true);
       showNotification("Teammate wiped the blackboard clean!");
@@ -72,11 +160,17 @@ export default function Level1() {
     });
 
     return () => {
+      unsubStateRequest();
+      unsubStateSync();
+      unsubSudokuMove();
+      unsubSudokuMistake();
+      unsubSudokuSolved();
+      unsubSudokuReset();
       unsubClean();
       unsubUnjam();
       unsubUnlock();
     };
-  }, [onRoomEvent]);
+  }, [onRoomEvent, broadcastRoomEvent]);
 
   // Custom Mouse Cursor when Item Equipped!
   useEffect(() => {
@@ -93,6 +187,10 @@ export default function Level1() {
 
   const handleBlackboardClick = () => {
     if (isBlackboardCleaned) return;
+    if (!isArtisan) {
+      showNotification("Only the Artisan can operate objects in the room. Ask them to use the eraser.");
+      return;
+    }
     if (equippedItem === "chalk_eraser_lvl1") {
       setIsBlackboardCleaned(true);
       showNotification("You wiped the blackboard clean.");
@@ -106,6 +204,10 @@ export default function Level1() {
 
   const handleLockClick = () => {
     if (isLockUnjammed) return;
+    if (!isArtisan) {
+      showNotification("Only the Artisan can force the rusted mechanism.");
+      return;
+    }
     if (equippedItem === "brass_compass_lvl1") {
       setIsLockUnjammed(true);
       showNotification("You used the sturdy brass compass to force the rusted gears open!");
@@ -117,12 +219,34 @@ export default function Level1() {
     }
   };
 
-  const handleSudokuSolved = (code: string) => {
+  const handleSudokuReady = (code: string) => {
     // Păstrăm numerele din colțurile pătratului central (ex: 9 elemente -> index 0, 2, 6, 8)
     if (code.length === 9) {
        setExtractedCode(code[0] + code[2] + code[6] + code[8]);
     } else {
        setExtractedCode(code);
+    }
+  };
+
+  const handleSudokuMove = ({ grid }: { row: number; col: number; value: number; grid: SudokuGridState }) => {
+    latestSudokuGridRef.current = grid;
+    setSudokuUserGrid(grid);
+    broadcastRoomEvent("SUDOKU_MOVE_LVL1", { grid });
+  };
+
+  const handleSudokuMistake = ({ mistakes }: { row: number; col: number; value: number; mistakes: number }) => {
+    setSudokuMistakes(mistakes);
+    broadcastRoomEvent("SUDOKU_MISTAKE_LVL1", { mistakes });
+  };
+
+  const handleSudokuSolved = (code: string, shouldBroadcast = true) => {
+    handleSudokuReady(code);
+    setIsSudokuCompleted(true);
+    if (shouldBroadcast) {
+      broadcastRoomEvent("SUDOKU_SOLVED_LVL1", {
+        code,
+        grid: latestSudokuGridRef.current,
+      });
     }
   };
 
@@ -151,16 +275,24 @@ export default function Level1() {
     }, 3000);
   };
 
-  const handleMistakesGameOver = () => {
+  const handleMistakesGameOver = (shouldBroadcast = true) => {
     setIsGameOver(true);
-    setTimeout(() => restartGame(), 4000);
+    if (shouldBroadcast) {
+      broadcastRoomEvent("SUDOKU_RESET_LVL1", {});
+    }
+    setTimeout(() => restartGame(false), 4000);
   };
 
-  const restartGame = () => {
+  const restartGame = (shouldBroadcast = true) => {
     setIsGameOver(false);
     setExtractedCode(null);
     setIsUnlocked(false);
     setShowLevelComplete(false);
+    setSudokuMistakes(0);
+    setIsSudokuCompleted(false);
+    if (shouldBroadcast) {
+      broadcastRoomEvent("SUDOKU_RESET_LVL1", {});
+    }
     setGameId((prev) => prev + 1);
   };
 
@@ -231,7 +363,21 @@ export default function Level1() {
             <div className="absolute inset-0 bg-black/50 pointer-events-none rounded-2xl"></div>
 
             <div className="relative z-10 w-full flex flex-col items-center">
-              <SudokuGrid key={`sudoku-${gameId}`} onReady={(code) => { if (code.length === 9) setExtractedCode(code[0] + code[2] + code[6] + code[8]); }} onSolved={handleSudokuSolved} onGameOver={handleMistakesGameOver} />
+              <SudokuGrid
+                key={`sudoku-${gameId}`}
+                puzzle={sharedSudoku.puzzle}
+                solution={sharedSudoku.solution}
+                userGrid={sudokuUserGrid}
+                mistakes={sudokuMistakes}
+                isCompleted={isSudokuCompleted}
+                disabled={!isArtisan}
+                disabledMessage="Only the Artisan can write in the cipher grid."
+                onReady={handleSudokuReady}
+                onCorrectMove={handleSudokuMove}
+                onMistake={handleSudokuMistake}
+                onSolved={handleSudokuSolved}
+                onGameOver={handleMistakesGameOver}
+              />
             </div>
           </div>
         </div>
