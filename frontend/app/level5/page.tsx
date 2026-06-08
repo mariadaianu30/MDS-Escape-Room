@@ -152,7 +152,7 @@ type VictoryStats = {
 
 export default function Level5Page() {
   const router = useRouter();
-  const { items, addItem, removeItem, equippedItem, setEquippedItem } = useInventory();
+  const { items, isLoaded: isInventoryLoaded, addItem, removeItem, equippedItem, setEquippedItem } = useInventory();
   const { isArtisan, isScribe } = useRoleAccess();
   const initialRingRotations = useRef(getRandomRingRotations());
 
@@ -175,6 +175,7 @@ export default function Level5Page() {
   const hasClearedStaleLevel5State = useRef(false);
 
   useEffect(() => {
+    if (!isInventoryLoaded) return;
     if (hasClearedStaleLevel5State.current) return;
     hasClearedStaleLevel5State.current = true;
 
@@ -187,11 +188,14 @@ export default function Level5Page() {
       "escapeRoomLevel5DoorOpen",
     ].forEach(key => localStorage.removeItem(key));
 
-    LEVEL5_ITEM_IDS.forEach(removeItem);
-    if (equippedItem && LEVEL5_ITEM_IDS.includes(equippedItem)) {
+    items.forEach(item => {
+      removeItem(item.id);
+    });
+
+    if (equippedItem) {
       setEquippedItem(null);
     }
-  }, [equippedItem, removeItem, setEquippedItem]);
+  }, [equippedItem, isInventoryLoaded, items, removeItem, setEquippedItem]);
 
   // Timer state
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
