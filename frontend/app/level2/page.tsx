@@ -24,26 +24,6 @@ const DIALOGUE_LINES = [
 ];
 
 // ----------------------------------------------------------------------------
-// STAGE 1: JOURNAL CONSTANTS
-// ----------------------------------------------------------------------------
-const CORRECT_BLANKS: Record<BlankId, FragmentWord> = { 
-  b1: 'calcinate', 
-  b2: 'conjoin', 
-  b3: 'sublime' 
-};
-
-const FRAGMENTS: { word: FragmentWord, hint: string }[] = [
-  { word: "dissolve",  hint: "break all bonds" },
-  { word: "conjoin",   hint: "unite opposites" },
-  { word: "purify",    hint: "remove the corrupt" },
-  { word: "calcinate", hint: "burn to white ash" },
-  { word: "ferment",   hint: "transform through decay" },
-  { word: "sublime",   hint: "rise without burning" }
-];
-
-
-
-// ----------------------------------------------------------------------------
 // STAGE 3: PIPES CONSTANTS
 // ----------------------------------------------------------------------------
 const PIPE_SIDES: Record<PipeType, {n:boolean,s:boolean,e:boolean,w:boolean}> = {
@@ -56,14 +36,48 @@ const PIPE_SIDES: Record<PipeType, {n:boolean,s:boolean,e:boolean,w:boolean}> = 
   'empty':       {n:false, s:false, e:false, w:false},
 };
 
-const INITIAL_GRID_DATA: PipeType[][] = [
-  ['straight-h', 'corner-sw', 'empty', 'straight-v', 'corner-se', 'empty'],
-  ['empty', 'straight-v', 'corner-se', 'corner-sw', 'straight-v', 'straight-h'],
-  ['corner-se', 'corner-ne', 'corner-sw', 'straight-v', 'corner-sw', 'empty'],
-  ['straight-v', 'empty', 'straight-v', 'corner-ne', 'corner-nw', 'straight-v'],
-  ['corner-ne', 'corner-sw', 'corner-nw', 'corner-se', 'corner-se', 'corner-sw'],
-  ['empty', 'corner-ne', 'straight-h', 'corner-ne', 'straight-h', 'corner-nw']
-];
+const generateRandomPipeGrid = (): PipeCell[][] => {
+  const grid: PipeType[][] = Array(6).fill(null).map(() => Array(6).fill('empty'));
+  const path: [number, number][] = [[0,0]];
+  let r = 0, c = 0;
+  
+  while (r < 5 || c < 5) {
+    if (r === 5) c++;
+    else if (c === 5) r++;
+    else {
+      Math.random() < 0.5 ? r++ : c++;
+    }
+    path.push([r, c]);
+  }
+
+  for (let i = 0; i < path.length; i++) {
+    const [pr, pc] = path[i];
+    const prev = i > 0 ? path[i-1] : [pr, pc - 1];
+    const next = i < path.length - 1 ? path[i+1] : [pr + 1, pc];
+    
+    const entryFrom = prev[0] < pr ? 'N' : prev[0] > pr ? 'S' : prev[1] < pc ? 'W' : 'E';
+    const exitTo = next[0] < pr ? 'N' : next[0] > pr ? 'S' : next[1] < pc ? 'W' : 'E';
+    
+    let type: PipeType = 'empty';
+    const dirs = [entryFrom, exitTo].sort().join('');
+    
+    if (dirs === 'EW') type = 'straight-h';
+    else if (dirs === 'NS') type = 'straight-v';
+    else if (dirs === 'EN') type = 'corner-ne';
+    else if (dirs === 'NW') type = 'corner-nw';
+    else if (dirs === 'ES') type = 'corner-se';
+    else if (dirs === 'SW') type = 'corner-sw';
+    
+    grid[pr][pc] = type;
+  }
+
+  const allTypes: PipeType[] = ['straight-h', 'straight-v', 'corner-ne', 'corner-nw', 'corner-se', 'corner-sw', 'empty'];
+  return grid.map(row => row.map(type => {
+    let t = type;
+    if (t === 'empty') t = allTypes[Math.floor(Math.random() * allTypes.length)];
+    return { type: t, rotation: Math.floor(Math.random() * 4), hasLiquid: false };
+  }));
+};
 
 // ----------------------------------------------------------------------------
 // COMPONENT
@@ -94,13 +108,14 @@ export default function Level2() {
   const [riddle3, setRiddle3] = useState("");
   const [showHint, setShowHint] = useState(false);
   const [jFeedback, setJFeedback] = useState<{type: "ok"|"err", msg: string} | null>(null);
+  const [attempts, setAttempts] = useState(0);
+
+  // --- DYNAMIC AI STATE ---
+  const [dynamicData, setDynamicData] = useState<any>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // --- STAGE 3 STATE ---
-  const [grid, setGrid] = useState<PipeCell[][]>(() => 
-    INITIAL_GRID_DATA.map(row => row.map(type => ({
-      type, rotation: Math.floor(Math.random() * 4), hasLiquid: false
-    })))
-  );
+  const [grid, setGrid] = useState<PipeCell[][]>(generateRandomPipeGrid);
 
   // Real-time Multiplayer Sync for Level 2 Room States
   useEffect(() => {
@@ -145,12 +160,18 @@ export default function Level2() {
       }, 800);
     });
 
+    const unsubDynamic = onRoomEvent("DYNAMIC_PUZZLE_SYNC", (payload: any) => {
+      setDynamicData(payload);
+      localStorage.setItem(`escapeRoomState_lvl2_dynamic_${roomCode || 'single'}`, JSON.stringify(payload));
+    });
+
     return () => {
       unsubStage();
       unsubObject();
       unsubRiddles();
       unsubPipe();
       unsubUnlock();
+      unsubDynamic();
     };
   }, [onRoomEvent]);
 
@@ -220,6 +241,8 @@ export default function Level2() {
   // Load state from localStorage on mount/roomCode change
   useEffect(() => {
     const key = roomCode ? `escapeRoomState_lvl2_${roomCode}` : `escapeRoomState_lvl2_single`;
+    const dynKey = roomCode ? `escapeRoomState_lvl2_dynamic_${roomCode}` : `escapeRoomState_lvl2_dynamic_single`;
+    
     const saved = localStorage.getItem(key);
     if (saved) {
       try {
@@ -233,12 +256,34 @@ export default function Level2() {
         if (typeof parsed.riddle1 === "string") setRiddle1(parsed.riddle1);
         if (typeof parsed.riddle2 === "string") setRiddle2(parsed.riddle2);
         if (typeof parsed.riddle3 === "string") setRiddle3(parsed.riddle3);
+        if (typeof parsed.attempts === "number") setAttempts(parsed.attempts);
         if (Array.isArray(parsed.grid)) setGrid(parsed.grid);
       } catch (e) {
         console.error("Failed to load saved level2 state", e);
       }
     }
+
+    const savedDyn = localStorage.getItem(dynKey);
+    if (savedDyn) {
+      setDynamicData(JSON.parse(savedDyn));
+    }
   }, [roomCode]);
+
+  // Generate dynamic puzzle on load if not present
+  useEffect(() => {
+    const dynKey = roomCode ? `escapeRoomState_lvl2_dynamic_${roomCode}` : `escapeRoomState_lvl2_dynamic_single`;
+    if (!dynamicData && !isGenerating && isArtisan) {
+      setIsGenerating(true);
+      fetch('/api/level2/generate', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+           setDynamicData(data);
+           localStorage.setItem(dynKey, JSON.stringify(data));
+           broadcastRoomEvent("DYNAMIC_PUZZLE_SYNC", data);
+        })
+        .finally(() => setIsGenerating(false));
+    }
+  }, [dynamicData, isGenerating, isArtisan, roomCode, broadcastRoomEvent]);
 
   // Save Level 2 state to localStorage when any state variable changes
   useEffect(() => {
@@ -253,10 +298,11 @@ export default function Level2() {
       riddle1,
       riddle2,
       riddle3,
+      attempts,
       grid
     };
     localStorage.setItem(key, JSON.stringify(stateToSave));
-  }, [stage, lineIndex, foundObjects, keySpawned, isDoorUnlocked, filled, riddle1, riddle2, riddle3, grid, roomCode]);
+  }, [stage, lineIndex, foundObjects, keySpawned, isDoorUnlocked, filled, riddle1, riddle2, riddle3, attempts, grid, roomCode]);
 
   // --- STAGE TRANSITION HELPER ---
   const advanceTo = (newStage: GameStage | 'hidden_objects', fromRemote = false) => {
@@ -285,23 +331,27 @@ export default function Level2() {
     const w = e.dataTransfer.getData('text') as FragmentWord;
     if (w) placeWord(id, w);
   };
-  const placeWord = (id: BlankId, w: FragmentWord) => {
+  const placeWord = (id: BlankId, w: FragmentWord | null) => {
     setFilled(p => {
       const n = {...p};
-      (Object.keys(n) as BlankId[]).forEach(k => { if(n[k] === w) n[k] = null; });
+      if (w !== null) {
+        (Object.keys(n) as BlankId[]).forEach(k => { if(n[k] === w) n[k] = null; });
+      }
       n[id] = w;
       broadcastRoomEvent("RIDDLES_SYNC", { filled: n });
       return n;
     });
   };
   const validateJournal = () => {
-    const isB1 = filled.b1 === CORRECT_BLANKS.b1;
-    const isB2 = filled.b2 === CORRECT_BLANKS.b2;
-    const isB3 = filled.b3 === CORRECT_BLANKS.b3;
+    if (!dynamicData) return;
     
-    const isR1 = riddle1.toLowerCase().trim() === 'au';
-    const isR2 = riddle2.toLowerCase().trim() === 'silver' || riddle2.toLowerCase().trim() === 'ag';
-    const isR3 = riddle3.toLowerCase().trim() === 'distill';
+    const isB1 = filled.b1 === dynamicData.gates[0].missingWord;
+    const isB2 = filled.b2 === dynamicData.gates[1].missingWord;
+    const isB3 = filled.b3 === dynamicData.gates[2].missingWord;
+    
+    const isR1 = riddle1.toLowerCase().trim() === dynamicData.riddles[0].answer.toLowerCase();
+    const isR2 = riddle2.toLowerCase().trim() === dynamicData.riddles[1].answer.toLowerCase();
+    const isR3 = riddle3.toLowerCase().trim() === dynamicData.riddles[2].answer.toLowerCase();
     const rOk = isR1 && isR2 && isR3;
 
     if (isB1 && isB2 && isB3 && rOk) {
@@ -310,7 +360,22 @@ export default function Level2() {
     } else {
       let wr = 0;
       if (!isB1) wr++; if (!isB2) wr++; if (!isB3) wr++;
-      setJFeedback({type: 'err', msg: `The elements reject your arrangement... (${wr} gate(s) failed${!rOk ? ', riddle incorrect' : ''})`});
+      
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+
+      if (newAttempts >= 3) {
+        setJFeedback({type: 'err', msg: "The flask shatters! The elements reject your incompetence. The laboratory resets..."});
+        setTimeout(() => {
+          const key = roomCode ? `escapeRoomState_lvl2_${roomCode}` : `escapeRoomState_lvl2_single`;
+          const dynKey = roomCode ? `escapeRoomState_lvl2_dynamic_${roomCode}` : `escapeRoomState_lvl2_dynamic_single`;
+          localStorage.removeItem(key);
+          localStorage.removeItem(dynKey);
+          window.location.reload();
+        }, 3500);
+      } else {
+        setJFeedback({type: 'err', msg: `The elements reject your arrangement... (${wr} gate(s) failed${!rOk ? ', riddle incorrect' : ''}). Attempts remaining: ${3 - newAttempts}`});
+      }
     }
   };
 
@@ -532,6 +597,17 @@ export default function Level2() {
   }
 
   if (stage === 'journal') {
+    if (!dynamicData) {
+      return (
+        <main className={`min-h-screen bg-[#0d0a14] flex flex-col items-center justify-center transition-opacity duration-800 ${fadeState==='in'?'opacity-100':'opacity-0'}`}>
+           <LevelHeader />
+           <div className="mt-12 text-[#d4a017] font-cinzel text-xl animate-pulse">
+              The journal pages are rewriting themselves...
+           </div>
+        </main>
+      );
+    }
+
     return (
       <main className={`min-h-screen bg-[#0d0a14] transition-opacity duration-800 ${fadeState==='in'?'opacity-100':'opacity-0'} p-6 flex flex-col`}>
         <LevelHeader />
@@ -556,31 +632,31 @@ export default function Level2() {
               
               <div className="pl-6 font-cormorant italic text-[16px] md:text-[18px] leading-[2]">
                 <h2 className="font-cinzel text-[11px] text-[#9a6018] mb-4 tracking-widest uppercase border-b border-[#b89050]/30 pb-2">
-                  ☽ The Night Formula — written under a blood eclipse ☉
+                  {dynamicData.journalTitle}
                 </h2>
                 <div className="mb-4">
-                  The Elixir demands three sacred acts, each guarded by a celestial gate. The Sun gives freely. The Moon withholds. Between them lives the truth.
+                  {dynamicData.journalIntro}
                 </div>
                 
                 <div className="mb-4">
-                  ☉ First Gate — Solar Calcination:<br/>
-                  When Sol stands at his zenith, the number of his sacred metal is LXXIX. From this, subtract the atomic weight of common salt's metal (XI), then add the legs of a spider (VIII). The result names the flame's intensity. One must 
+                  ☉ First Gate:<br/>
+                  {dynamicData.gates[0].textBefore} 
                   <Blank id="b1" val={filled.b1} onDrop={handleDrop} onRem={() => placeWord('b1',null as any)} /> 
-                  the base matter at precisely this degree until only the white ash remains — no more, no less, lest the Sun's gift turns to poison.
+                  {dynamicData.gates[0].textAfter}
                 </div>
 
                 <div className="mb-4">
-                  ☽ Second Gate — Lunar Conjunction:<br/>
-                  The Moon rules silver, whose number is XLVII. Divide this by the sacred proportion of the trinity (III), round to the nearest whole. This is the number of nights one must 
+                  ☽ Second Gate:<br/>
+                  {dynamicData.gates[1].textBefore} 
                   <Blank id="b2" val={filled.b2} onDrop={handleDrop} onRem={() => placeWord('b2',null as any)} /> 
-                  fire and water — Sol and Luna — under open sky, neither vessel covered, neither flame extinguished.
+                  {dynamicData.gates[1].textAfter}
                 </div>
 
                 <div className="mb-4">
-                  ♄ Third Gate — Saturnine Rest:<br/>
-                  Saturn's lead bears the number LXXXII. Halve it, then subtract the fingers of one hand (V). The residue must 
+                  ♄ Third Gate:<br/>
+                  {dynamicData.gates[2].textBefore} 
                   <Blank id="b3" val={filled.b3} onDrop={handleDrop} onRem={() => placeWord('b3',null as any)} /> 
-                  in sealed obsidian for precisely this count of moons, untouched by light, unmoved by hand — Saturn demands patience as the Moon demands silence.
+                  {dynamicData.gates[2].textAfter}
                 </div>
               </div>
             </div>
@@ -596,29 +672,28 @@ export default function Level2() {
                 </h2>
                 
                 <div className="mb-4">
-                  I. 'I am born in the belly of stars and die in the palm of kings. The Sun wears me as a crown. The Moon borrows my reflection to seem worthy. Alchemists chase me for a lifetime and find me only when they stop looking. What element am I?' — write the symbol, not the name.
+                  I. {dynamicData.riddles[0].text}
                   <input type="text" value={riddle1} disabled={!isArtisan} onChange={e => { setRiddle1(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle1: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04] disabled:cursor-not-allowed disabled:opacity-45" />
                 </div>
                 <div className="mb-4">
-                  II. The Moon's sacred metal, rearranged by a mad scholar. Unscramble the letters to find the element that rules tides and dreams: V I L R E S.
+                  II. {dynamicData.riddles[1].text}
                   <input type="text" value={riddle2} disabled={!isArtisan} onChange={e => { setRiddle2(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle2: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04] disabled:cursor-not-allowed disabled:opacity-45" />
                 </div>
                 <div className="mb-4">
-                  III. Decode this: GLVWLOO<br/>
-                  (Caesar shift: each letter moved forward by III — the trinity again). This word is the Third Gate's true name.
+                  III. {dynamicData.riddles[2].text}
                   <input type="text" value={riddle3} disabled={!isArtisan} onChange={e => { setRiddle3(e.target.value); broadcastRoomEvent("RIDDLES_SYNC", { riddle3: e.target.value }); }} className="w-full bg-[#dfc898]/30 border-b border-[#b89050] outline-none font-cormorant italic text-lg text-center py-1 mt-2 text-[#1e0e04] disabled:cursor-not-allowed disabled:opacity-45" />
                 </div>
 
                 {isScribe ? (
                 <div className="mt-6 text-sm">
                   <button onClick={() => setShowHint(!showHint)} className="text-[#9a6018] hover:underline">
-                    ☽ reveal one hint
+                    ☽ reveal marginal notes
                   </button>
                   {showHint && (
                     <div className="mt-2 text-[#7a5010] bg-[#dfc898]/30 p-3 rounded">
-                      Hint I: The Sun's metal on the periodic table is element 79.<br/>
-                      Hint II: The scrambled letters V I L R E S form a word meaning the metal of the moon. It's not gold.<br/>
-                      Hint III: Caesar +3 means A→D, B→E... reverse it: D→A, E→B, H→E...
+                      I: {dynamicData.riddles[0].hint || "Read the elements carefully."}<br/>
+                      II: {dynamicData.riddles[1].hint || "Find the hidden word."}<br/>
+                      III: {dynamicData.riddles[2].hint || "Reverse the cipher."}
                     </div>
                   )}
                 </div>
@@ -628,21 +703,22 @@ export default function Level2() {
               </div>
             </div>
 
-            <div className="text-center mt-4 h-16">
-              {filled.b1 && filled.b2 && filled.b3 && riddle1 && riddle2 && riddle3 && !jFeedback && (
+            <div className="text-center mt-4 min-h-[96px] flex flex-col items-center justify-center">
+              {jFeedback?.type === 'ok' && <div className="font-cinzel text-[#d4a017] text-xl drop-shadow-[0_0_8px_rgba(212,160,23,0.6)] mb-4">{jFeedback.msg}</div>}
+              {jFeedback?.type === 'err' && <div className="font-cormorant italic text-red-500 text-xl font-bold max-w-md mx-auto mb-4">{jFeedback.msg}</div>}
+
+              {filled.b1 && filled.b2 && filled.b3 && riddle1 && riddle2 && riddle3 && attempts < 3 && jFeedback?.type !== 'ok' && (
                 <button onClick={validateJournal} disabled={!isArtisan} className="font-cinzel bg-[#1a0e04] border border-[#7a5010] text-[#c8922a] px-8 py-3 w-full max-w-md hover:bg-[#c8922a] hover:text-[#1a0e04] transition-colors disabled:cursor-not-allowed disabled:opacity-45">
-                  ⚗ Attempt the Great Work
+                  ⚗ Attempt the Great Work ({3 - attempts} tries left)
                 </button>
               )}
-              {jFeedback?.type === 'ok' && <div className="font-cinzel text-[#d4a017] text-xl drop-shadow-[0_0_8px_rgba(212,160,23,0.6)]">{jFeedback.msg}</div>}
-              {jFeedback?.type === 'err' && <div className="font-cormorant italic text-red-500 text-xl font-bold">{jFeedback.msg}</div>}
             </div>
 
           </div>
 
           {/* RIGHT: FRAGMENTS */}
           <div className="flex flex-col gap-4">
-            {FRAGMENTS.map(f => {
+            {dynamicData.fragments.map((f: any) => {
               const used = Object.values(filled).includes(f.word);
               const sel = selectedFrag === f.word;
               return (
@@ -656,12 +732,6 @@ export default function Level2() {
                 </div>
               )
             })}
-
-            <div className="mt-8 bg-[rgba(212,160,23,0.06)] border border-[rgba(212,160,23,0.15)] p-4 text-center font-cinzel text-[10px] text-[#c8922a] leading-loose">
-              I=1 · V=5 · X=10<br/>L=50 · C=100<br/>
-              <hr className="border-[rgba(212,160,23,0.2)] my-2" />
-              LXXIX=79<br/>XLVII=47<br/>LXXXII=82
-            </div>
           </div>
 
         </div>
@@ -783,7 +853,8 @@ function LevelHeader() {
 function Blank({ id, val, onDrop, onRem }: { id:BlankId, val:string|null, onDrop:any, onRem:any }) {
   const isFilled = !!val;
   return (
-    <span className={`inline-flex relative min-w-[80px] h-[24px] mx-2 align-bottom transition-all ${isFilled ? 'border-b-2 border-solid border-[#4a7a10]' : 'border-b-2 border-dashed border-[#9a6018]'}`}
+    <span className={`inline-flex relative min-w-[80px] h-[24px] mx-2 align-bottom transition-all ${isFilled ? 'border-b-2 border-solid border-[#4a7a10] bg-[#4a7a10]/10 cursor-pointer hover:bg-[#7a1010]/20' : 'border-b-2 border-dashed border-[#9a6018]'}`}
+          onClick={(e) => { if (isFilled) { e.preventDefault(); onRem(); } }}
           onDrop={(e) => onDrop(e, id)}
           onDragOver={(e) => e.preventDefault()}>
       <div className="absolute inset-0 flex items-center justify-center font-cinzel text-[11px] font-bold text-[#2a1004] pt-1 tracking-widest uppercase">
@@ -791,7 +862,7 @@ function Blank({ id, val, onDrop, onRem }: { id:BlankId, val:string|null, onDrop
       </div>
 
       {isFilled && (
-        <div onClick={onRem} className="absolute -top-3 -right-3 w-4 h-4 bg-[#7a1010] text-[#f5e6c8] rounded-full text-[10px] flex items-center justify-center opacity-0 hover:opacity-100 cursor-pointer transition-opacity z-10">✕</div>
+        <div className="absolute -top-3 -right-3 w-4 h-4 bg-[#7a1010] text-[#f5e6c8] rounded-full text-[10px] flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity z-10 pointer-events-none">✕</div>
       )}
     </span>
   );

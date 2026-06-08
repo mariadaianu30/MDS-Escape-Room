@@ -171,7 +171,7 @@ export default function SudokuGrid({
   if (!userGrid) return <div className="text-[#a89f91] animate-pulse">Summoning Ancient Grid...</div>;
 
   return (
-    <div className="bg-[#1f150b] p-4 md:p-6 rounded-lg shadow-2xl border-4 border-[#3c2a1a] flex flex-col items-center w-full max-w-[450px] relative">
+    <div className="p-4 md:p-6 rounded-lg flex flex-col items-center w-full max-w-[380px] relative">
       {disabled && (
         <div className="mb-4 w-full rounded border border-[#5c4026]/70 bg-black/45 px-4 py-2 text-center font-cinzel text-[10px] uppercase tracking-[0.18em] text-[#8c7a6b]">
           {disabledMessage}
