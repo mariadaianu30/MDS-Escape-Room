@@ -9,6 +9,7 @@ import AIHintDialog from "@/components/AIHintDialog";
 import NarratorDialog from "@/components/NarratorDialog";
 import RouteGuard from "@/components/RouteGuard";
 import GlobalMultiplayerWidgets from "@/components/GlobalMultiplayerWidgets";
+import SaveAndExit from "@/components/SaveAndExit";
 
 export const metadata: Metadata = {
   title: "Escape Room",
@@ -33,6 +34,7 @@ export default function RootLayout({
               {children}
               <Inventory />
               <Timer />
+              <SaveAndExit />
               <AIHintDialog />
               <NarratorDialog />
               <GlobalMultiplayerWidgets />

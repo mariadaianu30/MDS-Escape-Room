@@ -15,6 +15,7 @@ const GAME_DURATION = 30 * 60; // 30 minutes
 interface TimerContextType {
   timeLeft: number;
   isGameOver: boolean;
+  syncGameProgress: (remaining: number) => Promise<void>;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
@@ -94,6 +95,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             if (calculatedRemaining > 0) {
               setTimeLeft(calculatedRemaining);
               localStorage.setItem("escapeRoomEndTime", String(Date.now() + calculatedRemaining * 1000));
+              setIsStarted(true);
               return;
             }
           }
@@ -104,6 +106,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             const calculatedRemaining = Math.max(0, Math.floor((parseInt(storedEndTime, 10) - Date.now()) / 1000));
             if (calculatedRemaining > 0) {
               setTimeLeft(calculatedRemaining);
+              setIsStarted(true);
               return;
             }
           }
@@ -167,6 +170,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             if (calculatedRemaining > 0) {
               setTimeLeft(calculatedRemaining);
               localStorage.setItem("escapeRoomEndTime", String(Date.now() + calculatedRemaining * 1000));
+              setIsStarted(true);
               return;
             }
           }
@@ -175,6 +179,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
             const calculatedRemaining = Math.max(0, Math.floor((parseInt(storedEndTime, 10) - Date.now()) / 1000));
             if (calculatedRemaining > 0) {
               setTimeLeft(calculatedRemaining);
+              setIsStarted(true);
               return;
             }
           }
@@ -327,7 +332,7 @@ export function TimerProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <TimerContext.Provider value={{ timeLeft, isGameOver }}>
+    <TimerContext.Provider value={{ timeLeft, isGameOver, syncGameProgress }}>
       {children}
     </TimerContext.Provider>
   );

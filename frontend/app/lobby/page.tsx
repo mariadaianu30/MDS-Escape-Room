@@ -120,18 +120,28 @@ export default function IntroHome() {
         const { data, error } = await supabase
           .from('player')
           .select('username, current_level, remaining_time, best_score')
+          .gte('best_score', 5000)
           .order('best_score', { ascending: false })
-          .order('current_level', { ascending: false })
-          .order('remaining_time', { ascending: false })
-          .limit(10);
+          .limit(100); // Fetch more to deduplicate locally
         if (error) {
           setLeaderboardData(localScores);
           return;
         }
-        const merged = [...(data || []), ...localScores]
-          .sort((a, b) => (b.best_score || 0) - (a.best_score || 0) || (b.remaining_time || 0) - (a.remaining_time || 0))
-          .slice(0, 10);
-        setLeaderboardData(merged);
+        
+        const allScores = [...(data || []), ...localScores]
+          .sort((a, b) => (b.best_score || 0) - (a.best_score || 0) || (b.remaining_time || 0) - (a.remaining_time || 0));
+        
+        const uniquePlayers = [];
+        const seenUsernames = new Set();
+        for (const p of allScores) {
+           const uname = p.username || "Unknown";
+           if (!seenUsernames.has(uname)) {
+              seenUsernames.add(uname);
+              uniquePlayers.push(p);
+           }
+        }
+        
+        setLeaderboardData(uniquePlayers.slice(0, 10));
       } catch (err) {
         console.error("Failed to fetch leaderboard:", err);
         setLeaderboardData(JSON.parse(localStorage.getItem("escapeRoomLocalLeaderboard") || "[]"));
@@ -261,7 +271,7 @@ export default function IntroHome() {
         if (!player) {
           const { data: fetchedPlayer } = await supabase
             .from('player')
-            .select('username, current_level, remaining_time, best_score')
+            .select('*')
             .eq('id', session.user.id)
             .maybeSingle();
           player = fetchedPlayer;
@@ -325,7 +335,7 @@ export default function IntroHome() {
         try {
           const { data } = await supabase
             .from("rooms")
-            .select("created_by, is_started")
+            .select("created_by, is_started, remaining_time")
             .eq("code", roomCode)
             .maybeSingle();
           room = data;
@@ -338,6 +348,22 @@ export default function IntroHome() {
           const isLocalHost = localStorage.getItem(`escapeRoomIsHost_${roomCode}`) === "true";
           setIsHost(!!(isCreator || isLocalHost));
           setRoomStarted(room.is_started !== false);
+
+          // If joining a completely new/unstarted room, wipe local progress to sync with host at level 1
+          if (room.is_started === false && room.remaining_time === GAME_DURATION) {
+             const previouslyWiped = localStorage.getItem(`escapeRoomWiped_${roomCode}`);
+             if (!previouslyWiped) {
+               clearRunStorage();
+               localStorage.setItem(`escapeRoomWiped_${roomCode}`, "true");
+               setCompletedLevel(0);
+                localStorage.setItem("escapeRoomRoomCode", roomCode || ""); // Restore the roomCode we just wiped!
+               
+               // If this user was somehow the creator, restore the flag
+               if (isCreator || isLocalHost) {
+                 localStorage.setItem(`escapeRoomIsHost_${roomCode}`, "true");
+               }
+             }
+          }
 
           // Subscribe to Postgres changes on this specific room (optional fallback)
           try {
@@ -497,6 +523,12 @@ export default function IntroHome() {
 
   const handleHostRoom = async () => {
     const generatedCode = "ESC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    setRoomStarted(false); 
+    
+    // Wipe local state so the new room starts fresh at Level 1
+    clearRunStorage();
+    setCompletedLevel(0);
+    
     try {
       const { data: authData } = await supabase.auth.getUser();
       const creatorId = authData?.user?.id || "guest_" + Math.random().toString(36).substring(2, 9);
@@ -512,7 +544,10 @@ export default function IntroHome() {
     } catch (e) {
       // Ignore DB errors if table doesn't exist
     }
+    
+    // Set Host flag AFTER wipe
     localStorage.setItem(`escapeRoomIsHost_${generatedCode}`, "true");
+    
     enterRoomWithRole(generatedCode, "scribe");
   };
 
@@ -549,14 +584,22 @@ export default function IntroHome() {
     try {
       const isGuestMode = localStorage.getItem("escapeRoomGuestMode") === "1";
       const { data: { session } } = await supabase.auth.getSession();
+      
+      const prevRuns = parseInt(localStorage.getItem("escapeRoomRunsAttempted") || "0", 10);
+      localStorage.setItem("escapeRoomRunsAttempted", String(prevRuns + 1));
+
       if (session?.user && !isGuestMode) {
+        const nextGamesPlayed = (userProfile?.games_played || 0) + 1;
         const { error } = await supabase
           .from("player")
           .update({ current_level: 1, remaining_time: GAME_DURATION })
           .eq("id", session.user.id);
-        if (error) throw error;
+        if (error) console.error("DB update failed on replay:", error);
+        else setUserProfile(prev => prev ? { ...prev, games_played: nextGamesPlayed } : null);
       }
-
+    } catch (error) {
+      console.error("Failed to restart run:", error);
+    } finally {
       setCompletedLevel(0);
       setIsGameOver(false);
       setIsAccountRunExpired(false);
@@ -565,10 +608,8 @@ export default function IntroHome() {
         current_level: 1,
         remaining_time: GAME_DURATION
       } : profile);
-    } catch (error) {
-      console.error("Failed to restart run:", error);
-    } finally {
       setIsRestartingRun(false);
+      window.location.reload(); // Hard reset to clear out context caches
     }
   };
 
@@ -600,6 +641,10 @@ export default function IntroHome() {
     }
 
     if (level === 1) {
+       const prevRuns = parseInt(localStorage.getItem("escapeRoomRunsAttempted") || "0", 10);
+       if (prevRuns === 0) {
+          localStorage.setItem("escapeRoomRunsAttempted", "1");
+       }
        // Snap to top to ensure clean zoom origin!
        window.scrollTo({ top: 0, behavior: 'smooth' });
        setIsZooming(true);
@@ -615,6 +660,7 @@ export default function IntroHome() {
   const enterRoomWithRole = (code: string, role: PlayerRole) => {
     setRoomCode(code);
     setCurrentRole(role);
+    setRoomStarted(false); // Fix auto-routing bug for joining guests
   };
 
   const copyRoomCodeToClipboard = () => {
@@ -914,7 +960,7 @@ export default function IntroHome() {
                )
             ) : (
                <button 
-                  onClick={() => isAccountRunExpired ? restartRun() : attemptEnterDoor(Math.min(completedLevel + 1, 5))}
+                  onClick={() => (isAccountRunExpired || completedLevel >= 5) ? restartRun() : attemptEnterDoor(Math.min(completedLevel + 1, 5))}
                   disabled={isRestartingRun}
                   className={`font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 uppercase border-4 border-white/50 disabled:opacity-60 disabled:cursor-wait
                      ${isAccountRunExpired
@@ -922,7 +968,7 @@ export default function IntroHome() {
                        : "bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] animate-pulse"
                      }`}
                >
-                  {isRestartingRun ? "Restarting..." : isAccountRunExpired ? "Restart Run" : completedLevel > 0 ? `Resume (Ch1-${Math.min(completedLevel + 1, 5)})` : "Play"}
+                  {isRestartingRun ? "Restarting..." : isAccountRunExpired ? "Restart Run" : completedLevel >= 5 ? "Replay Game" : completedLevel > 0 ? `Continue Chamber ${Math.min(completedLevel + 1, 5)}` : "Play"}
                </button>
             )}
          </div>
@@ -931,24 +977,24 @@ export default function IntroHome() {
 
       {/* 5. Rules & Lore Modal overlay (Anchored fixed above everything!) */}
       {showRules && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
-            <div className="relative max-w-3xl w-full mx-auto bg-[#150e09] border-[3px] border-[#d4af37] p-10 md:p-16 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')]">
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4 py-8">
+            <div className="relative max-w-3xl w-full mx-auto max-h-[90vh] overflow-y-auto bg-[#150e09] border-[3px] border-[#d4af37] p-6 md:p-10 rounded-xl shadow-[0_0_100px_rgba(212,175,55,0.3)] bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')]">
                
                <button 
                   onClick={() => setShowRules(false)}
-                  className="absolute top-4 right-4 md:top-6 md:right-6 w-12 h-12 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-2xl font-bold transition-all rounded"
+                  className="absolute top-4 right-4 md:top-6 md:right-6 w-10 h-10 flex items-center justify-center bg-black border border-[#5c4026] text-[#c7baaa] hover:text-[#d4af37] hover:border-[#d4af37] font-cinzel text-xl font-bold transition-all rounded"
                >
                   X
                </button>
 
-               <h2 className="font-cinzel text-4xl md:text-5xl text-[#d4af37] mb-8 text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold">How to Play</h2>
+               <h2 className="font-cinzel text-3xl md:text-4xl text-[#d4af37] mb-6 text-center tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.6)] font-bold">How to Play</h2>
                
-               <div className="space-y-6 text-[#e5d8b3] font-cormorant text-xl md:text-2xl leading-relaxed">
-                  <p className="italic border-b-2 border-[#5c4026] pb-8 text-center md:px-8">
+               <div className="space-y-4 text-[#e5d8b3] font-cormorant text-lg md:text-xl leading-relaxed">
+                  <p className="italic border-b-2 border-[#5c4026] pb-6 text-center md:px-8">
                      "You have been trapped deep inside the ancient catacombs. Five archaic rooms block your path to salvation. Solve the mechanical riddles hidden within each chamber, or the walls will forever seal your fate."
                   </p>
                   
-                  <ul className="list-disc pl-6 md:pl-8 pt-4 space-y-4 marker:text-[#d4af37]">
+                  <ul className="list-disc pl-6 md:pl-8 pt-2 space-y-3 marker:text-[#d4af37]">
                      <li><strong>5 Chambers:</strong> Proceed in order to unlock deeper rooms.</li>
                      <li><strong>The Vault Clock:</strong> You possess merely <span className="text-red-400 font-bold tracking-wider">30 Minutes</span> of absolute global timeline across the entire game.</li>
                      <li><strong>The Mechanism Tolerance:</strong> Attempting to force an incorrect combination will jam the gears. You have a maximum of <span className="text-red-400 font-bold tracking-wider">3 Mistakes</span> per room before the puzzle abruptly resets.</li>
@@ -959,6 +1005,8 @@ export default function IntroHome() {
             </div>
          </div>
       )}
+
+
 
       {/* Leaderboard Modal overlay */}
       {showLeaderboard && (
@@ -995,7 +1043,6 @@ export default function IntroHome() {
                               <th className="py-3 px-2 text-center w-16">Rank</th>
                               <th className="py-3 px-4">Explorer</th>
                               <th className="py-3 px-4 text-center">Score</th>
-                              <th className="py-3 px-4 text-center">Highest Chamber</th>
                               <th className="py-3 px-4 text-center">Remaining Time</th>
                            </tr>
                         </thead>
@@ -1022,9 +1069,6 @@ export default function IntroHome() {
                                     </td>
                                     <td className="py-4 px-4 text-center font-cinzel text-[#d4af37]">
                                        {player.best_score || 0}
-                                    </td>
-                                    <td className="py-4 px-4 text-center">
-                                       Chamber {highestChamber}
                                     </td>
                                     <td className="py-4 px-4 text-center font-mono text-sm tracking-wider text-red-300">
                                        {formatTime(player.remaining_time)}
@@ -1248,73 +1292,46 @@ export default function IntroHome() {
                <div className="space-y-8 text-[#e5d8b3]">
                   {/* Progress Block */}
                   <div className="space-y-4">
-                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Adventure Journal</h3>
+                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Player Statistics</h3>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
-                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Chambers Conquered</p>
-                           <p className="text-2xl font-bold">{completedLevel} / 5 Floors</p>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Best Score</p>
+                           <p className="text-3xl font-bold text-[#d4af37]">{userProfile.best_score || 0}</p>
                         </div>
-                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg">
-                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Current Standing</p>
-                           <p className="text-2xl font-bold text-[#d4af37]">
-                              {isAccountRunExpired ? "Run Expired" : `Chamber ${Math.min(completedLevel + 1, 5)}`}
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Best Time</p>
+                           <p className="text-3xl font-bold text-[#e5d8b3]">
+                              {userProfile.best_score && userProfile.best_score >= 5000 
+                                 ? formatTime((userProfile.best_score - 5000) / 2) 
+                                 : "N/A"}
                            </p>
+                        </div>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center md:col-span-2">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Games Played</p>
+                           <p className="text-3xl font-bold text-[#e5d8b3]">{userProfile.games_played || 0}</p>
                         </div>
                      </div>
                   </div>
+                  
+                  <button 
+                     onClick={async () => {
+                        clearRunStorage();
+                        await supabase.auth.signOut();
+                        window.location.reload();
+                     }}
+                     className="mt-6 w-full py-4 bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 text-red-200 transition-colors uppercase tracking-widest text-xs font-bold rounded-lg"
+                  >
+                     Sign Out
+                  </button>
                      {isAccountRunExpired && (
                         <button
                            onClick={restartRun}
                            disabled={isRestartingRun}
                            className="w-full rounded-lg border-2 border-red-800 bg-red-950/40 px-5 py-4 text-red-300 transition-colors hover:border-red-500 hover:bg-red-900/60 disabled:cursor-wait disabled:opacity-60"
                         >
-                           {isRestartingRun ? "Restarting Run..." : "Restart From Chamber I"}
+                           {isRestartingRun ? "Restarting..." : "Replay"}
                         </button>
                      )}
-
-                  {/* Account Run Records */}
-                  <div className="space-y-4">
-                     <h3 className="text-lg text-[#d4af37] tracking-wider uppercase border-l-2 border-[#d4af37] pl-3">Account Run Records</h3>
-                     <div className="space-y-3">
-                        {completedLevel === 0 && !isAccountRunExpired ? (
-                           <div className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg text-center">
-                              <p className="font-cormorant text-lg italic text-[#c7baaa]">No chambers completed on this account yet.</p>
-                           </div>
-                        ) : (
-                           <>
-                              {LABELS.slice(0, completedLevel).map((label, index) => (
-                                 <div key={label} className="p-4 bg-[#23170e]/40 border border-[#5c4026]/40 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div>
-                                       <p className="text-lg font-bold text-[#ffedb3]">Chamber {index + 1}: {label}</p>
-                                       <p className="text-xs text-[#8c7a6b] tracking-wider uppercase mt-0.5">Saved from this account's progress</p>
-                                    </div>
-                                    <div className="text-right">
-                                       <span className="px-3 py-1 bg-green-950/40 border border-green-800 text-green-400 rounded text-xs font-mono font-bold tracking-widest">
-                                          COMPLETED
-                                       </span>
-                                    </div>
-                                 </div>
-                              ))}
-                              {isAccountRunExpired && (
-                                 <div className="p-4 bg-red-950/30 border border-red-900 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div>
-                                       <p className="text-lg font-bold text-red-200">Current Run</p>
-                                       <p className="text-xs text-red-300/70 tracking-wider uppercase mt-0.5">Timer saved as expired in your account</p>
-                                    </div>
-                                    <span className="px-3 py-1 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs font-mono font-bold tracking-widest">
-                                       TIME EXPIRED
-                                    </span>
-                                 </div>
-                              )}
-                           </>
-                        )}
-                     </div>
-                  </div>
-
-                  {/* Footnote */}
-                  <p className="text-center font-cormorant italic text-sm text-[#8c7a6b] pt-4">
-                     "These records are read from your current account and local guest run, not from sample data."
-                  </p>
                </div>
 
             </div>
@@ -1337,7 +1354,7 @@ export default function IntroHome() {
               disabled={isRestartingRun}
               className="text-xl text-[#0a0705] bg-red-800 hover:bg-red-500 transition-colors font-cinzel font-bold px-8 py-3 rounded uppercase tracking-widest"
             >
-              {isRestartingRun ? "Restarting..." : "Restart Run"}
+              {isRestartingRun ? "Restarting..." : "Replay"}
             </button>
           </div>
         </div>

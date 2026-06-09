@@ -25,8 +25,9 @@ type SudokuGridState = number[][];
 const cloneGrid = (grid: SudokuGridState) => grid.map((row) => [...row]);
 
 export default function Level1() {
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  const { hasItem, items, equippedItem, setEquippedItem, removeItem, roomCode, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const { hasItem, items, equippedItem, setEquippedItem, removeItem, roomCode, onRoomEvent, broadcastRoomEvent, clientId, roomPlayers } = useInventory();
   const { isArtisan, isScribe } = useRoleAccess();
   const hasCompass = hasItem("brass_compass_lvl1");
   const hasEraser = hasItem("chalk_eraser_lvl1");
@@ -44,9 +45,26 @@ export default function Level1() {
   const [sudokuUserGrid, setSudokuUserGrid] = useState<SudokuGridState | null>(null);
   const [sudokuMistakes, setSudokuMistakes] = useState(0);
   const [isSudokuCompleted, setIsSudokuCompleted] = useState(false);
+  const [lastSudokuClientId, setLastSudokuClientId] = useState<string | null>(null);
+  const [currentTurnClientId, setCurrentTurnClientId] = useState<string | null>(null);
   const [remoteUpdates, setRemoteUpdates] = useState<Array<{ row: number; col: number; value: number; username: string }>>([]);
   const latestStateRef = useRef<any>(null);
   const latestSudokuGridRef = useRef<SudokuGridState | null>(null);
+
+  // Compute the effectively active turn
+  const activeTurnClientId = useMemo(() => {
+    if (!roomCode) return clientId; // Single player
+    if (roomPlayers.length === 0) return clientId; // Fallback
+    if (currentTurnClientId && roomPlayers.some(p => p.id === currentTurnClientId)) {
+      return currentTurnClientId;
+    }
+    // Default to first player
+    return roomPlayers[0].id;
+  }, [roomCode, roomPlayers, currentTurnClientId, clientId]);
+
+  const activeTurnPlayer = useMemo(() => {
+    return roomPlayers.find(p => p.id === activeTurnClientId);
+  }, [roomPlayers, activeTurnClientId]);
 
   // Real-time sudoku sync hook
   const { broadcastSudokuUpdate } = useRealtimeSudoku(
@@ -63,6 +81,10 @@ export default function Level1() {
   };
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
     const saved = localStorage.getItem(key);
     if (saved) {
@@ -76,6 +98,8 @@ export default function Level1() {
           setSudokuUserGrid(parsed.sudokuUserGrid);
           latestSudokuGridRef.current = parsed.sudokuUserGrid;
         }
+        if (typeof parsed.lastSudokuClientId === "string") setLastSudokuClientId(parsed.lastSudokuClientId);
+        if (typeof parsed.currentTurnClientId === "string") setCurrentTurnClientId(parsed.currentTurnClientId);
         if (typeof parsed.sudokuMistakes === "number") setSudokuMistakes(parsed.sudokuMistakes);
         if (typeof parsed.isSudokuCompleted === "boolean") setIsSudokuCompleted(parsed.isSudokuCompleted);
         return;
@@ -88,6 +112,8 @@ export default function Level1() {
     latestSudokuGridRef.current = cloneGrid(sharedSudoku.puzzle);
     setSudokuMistakes(0);
     setIsSudokuCompleted(false);
+    setLastSudokuClientId(null);
+    setCurrentTurnClientId(null);
     setIsBlackboardCleaned(false);
     setIsLockUnjammed(false);
     setIsUnlocked(false);
@@ -103,10 +129,12 @@ export default function Level1() {
       extractedCode,
       sudokuUserGrid,
       sudokuMistakes,
-      isSudokuCompleted
+      isSudokuCompleted,
+      lastSudokuClientId,
+      currentTurnClientId
     };
     localStorage.setItem(key, JSON.stringify(stateToSave));
-  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted, roomCode]);
+  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted, roomCode, lastSudokuClientId, currentTurnClientId]);
 
   useEffect(() => {
     latestStateRef.current = {
@@ -117,8 +145,10 @@ export default function Level1() {
       sudokuGrid: sudokuUserGrid,
       sudokuMistakes,
       sudokuCompleted: isSudokuCompleted,
+      lastSudokuClientId,
+      currentTurnClientId
     };
-  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted]);
+  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted, lastSudokuClientId, currentTurnClientId]);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -152,12 +182,16 @@ export default function Level1() {
       }
       if (typeof payload.sudokuMistakes === "number") setSudokuMistakes(payload.sudokuMistakes);
       if (typeof payload.sudokuCompleted === "boolean") setIsSudokuCompleted(payload.sudokuCompleted);
+      if (typeof payload.lastSudokuClientId === "string") setLastSudokuClientId(payload.lastSudokuClientId);
+      if (typeof payload.currentTurnClientId === "string") setCurrentTurnClientId(payload.currentTurnClientId);
     });
     const unsubSudokuMove = onRoomEvent("SUDOKU_MOVE_LVL1", (payload: any) => {
       if (Array.isArray(payload?.grid)) {
         latestSudokuGridRef.current = payload.grid;
         setSudokuUserGrid(payload.grid);
       }
+      if (payload.clientId) setLastSudokuClientId(payload.clientId);
+      if (payload.nextClientId) setCurrentTurnClientId(payload.nextClientId);
     });
     const unsubSudokuMistake = onRoomEvent("SUDOKU_MISTAKE_LVL1", (payload: any) => {
       if (typeof payload?.mistakes === "number") {
@@ -166,6 +200,8 @@ export default function Level1() {
           handleMistakesGameOver(false);
         }
       }
+      if (payload.clientId) setLastSudokuClientId(payload.clientId);
+      if (payload.nextClientId) setCurrentTurnClientId(payload.nextClientId);
     });
     const unsubSudokuSolved = onRoomEvent("SUDOKU_SOLVED_LVL1", (payload: any) => {
       if (Array.isArray(payload?.grid)) {
@@ -279,14 +315,42 @@ export default function Level1() {
   };
 
   const handleSudokuMove = ({ grid }: { row: number; col: number; value: number; grid: SudokuGridState }) => {
+    if (roomCode && activeTurnClientId !== clientId) {
+      showNotification(`It is not your turn! Wait for ${activeTurnPlayer?.username || "another player"}.`);
+      return;
+    }
+
+    let nextClientId = clientId;
+    if (roomPlayers.length > 1) {
+       const currentIndex = roomPlayers.findIndex(p => p.id === clientId);
+       const nextIndex = (currentIndex + 1) % roomPlayers.length;
+       nextClientId = roomPlayers[nextIndex].id;
+    }
+
     latestSudokuGridRef.current = grid;
     setSudokuUserGrid(grid);
-    broadcastRoomEvent("SUDOKU_MOVE_LVL1", { grid });
+    setLastSudokuClientId(clientId);
+    setCurrentTurnClientId(nextClientId);
+    broadcastRoomEvent("SUDOKU_MOVE_LVL1", { grid, clientId, nextClientId });
   };
 
   const handleSudokuMistake = ({ mistakes }: { row: number; col: number; value: number; mistakes: number }) => {
+    if (roomCode && activeTurnClientId !== clientId) {
+      showNotification(`It is not your turn! Wait for ${activeTurnPlayer?.username || "another player"}.`);
+      return;
+    }
+    
+    let nextClientId = clientId;
+    if (roomPlayers.length > 1) {
+       const currentIndex = roomPlayers.findIndex(p => p.id === clientId);
+       const nextIndex = (currentIndex + 1) % roomPlayers.length;
+       nextClientId = roomPlayers[nextIndex].id;
+    }
+
     setSudokuMistakes(mistakes);
-    broadcastRoomEvent("SUDOKU_MISTAKE_LVL1", { mistakes });
+    setLastSudokuClientId(clientId);
+    setCurrentTurnClientId(nextClientId);
+    broadcastRoomEvent("SUDOKU_MISTAKE_LVL1", { mistakes, clientId, nextClientId });
   };
 
   const handleSudokuSolved = (code: string, shouldBroadcast = true) => {
@@ -361,6 +425,8 @@ export default function Level1() {
     router.push("/lobby");
   };
 
+  if (!mounted) return null;
+
   return (
     <main className="min-h-screen relative overflow-hidden bg-[#0a0705] font-cormorant flex flex-col items-center select-none">
 
@@ -372,15 +438,7 @@ export default function Level1() {
 
 
 
-      {/* Top Header with Save & Exit */}
-      <div className="absolute top-4 left-4 z-50">
-        <button 
-          onClick={handleSaveAndExit}
-          className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-4 py-2 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
-        >
-          Save & Exit
-        </button>
-      </div>
+
 
       {/* Title */}
       <div className="relative z-20 mt-5 mb-2 flex flex-col items-center w-full">
@@ -396,7 +454,7 @@ export default function Level1() {
 
       {/* Timer is now rendered in layout.tsx globally */}
 
-      <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-12 md:gap-24 overflow-hidden mt-6">
+      <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-6 md:gap-12 overflow-hidden mt-6">
         <InspectionNarrator
           objects={[
             { id: "library", label: "Library Shelves", level: 1 },
@@ -406,7 +464,7 @@ export default function Level1() {
         />
 
         {/* Central Desk Area - Sudoku */}
-        <div className="flex flex-col items-center justify-center w-full max-w-xl xl:max-w-2xl relative shrink-0 translate-x-6 md:translate-x-12 xl:translate-x-20 z-20">
+        <div className="flex flex-col items-center justify-center w-full max-w-lg xl:max-w-xl relative shrink-0 z-20">
           <div className="relative p-6 md:p-10 w-full flex flex-col items-center justify-center rounded-2xl shadow-2xl"
             style={{
               backgroundImage: 'url(/images/desk.png)',
@@ -420,21 +478,34 @@ export default function Level1() {
             <div className="absolute inset-0 bg-black/50 pointer-events-none rounded-2xl"></div>
 
             <div className="relative z-10 w-full flex flex-col items-center">
+              {roomCode && !isSudokuCompleted && (
+                 <div className="mb-4 bg-black/80 border border-[#d4af37] px-6 py-2 rounded shadow-[0_0_15px_rgba(212,175,55,0.4)]">
+                    <p className="font-cinzel text-[#e5d8b3] text-sm tracking-widest uppercase">
+                       Turn: <span className={activeTurnClientId === clientId ? "text-green-400 font-bold" : "text-[#d4af37]"}>
+                          {activeTurnClientId === clientId ? "Your Turn" : `${activeTurnPlayer?.username || 'Teammate'}`}
+                       </span>
+                    </p>
+                 </div>
+              )}
               <SudokuGrid
                 key={`sudoku-${gameId}`}
                 puzzle={sharedSudoku.puzzle}
                 solution={sharedSudoku.solution}
-                userGrid={sudokuUserGrid}
+                userGrid={sudokuUserGrid || sharedSudoku.puzzle}
                 mistakes={sudokuMistakes}
                 isCompleted={isSudokuCompleted}
-                disabled={!isArtisan}
-                disabledMessage="Only the Artisan can write in the cipher grid."
+                disabled={roomCode ? activeTurnClientId !== clientId : !isArtisan}
+                disabledMessage={roomCode ? "Wait for your turn to write." : "Only the Artisan can write in the cipher grid."}
                 onReady={handleSudokuReady}
                 onCorrectMove={handleSudokuMove}
-                onMistake={handleSudokuMistake}
+                onMistake={(move) => {
+                  if (roomCode && activeTurnClientId !== clientId) return; // Prevent mistake callback if blocked
+                  handleSudokuMistake(move);
+                }}
                 onSolved={handleSudokuSolved}
                 onGameOver={handleMistakesGameOver}
                 onCellUpdate={(row, col, value) => {
+                  if (roomCode && activeTurnClientId !== clientId) return;
                   // Broadcast sudoku update to other players in room
                   if (roomCode) {
                     broadcastSudokuUpdate(row, col, value);

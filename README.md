@@ -524,9 +524,25 @@ The full report includes the specific prompts used, the outputs produced, and an
 
 ## Demo
 
-> A recorded screencast demonstrating the complete gameplay — room exploration, puzzle solving, AI hint interaction, and final escape — will be linked here before the final presentation.
+Click the preview below to watch the project demonstration on YouTube:
 
----
+[![Project Demo](https://youtu.be/M_nCI4snkO0)
+
+### 📌 Video Navigation (Timestamps)
+
+If you want to skip ahead to specific features, here is a quick guide to the video:
+
+* **00:00** - 🚀 **Introduction & Login**
+* **00:48** - 🎮 **How to create a Multiplayer room**
+* **01:00** - 👥 **How to join a room and select a role**
+* **01:25** - 🧩 **Level 1**
+* **11:44** - 🧩 **Level 2**
+* **14:08** - 🧩 **Level 3**
+* **14:50** - 🔮 **How to chat with the Oracle (AI hint agent)**
+* **15:10** - 💬 **Chamber Chat - How players communicate**
+* **15:28** - 🧩 **Level 4**
+* **16:00** - ⚙️ **How Chamber Chat is requested**
+* **17:45** - 🧩 **Level 5**
 
 
 <p align="center">

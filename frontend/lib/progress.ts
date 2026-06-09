@@ -29,7 +29,7 @@ export async function saveAccountProgress(currentLevel: number, remainingTime = 
     .maybeSingle();
 
   const completedChambers = currentLevel - 1;
-  const score = completedChambers > 0 ? (completedChambers * 1000 + Math.max(0, remainingTime) * 2) : 0;
+  const score = completedChambers > 0 ? (completedChambers * 1000 + (currentLevel >= 6 ? Math.max(0, remainingTime) * 2 : 0)) : 0;
   const bestScore = Math.max(player?.best_score || 0, score);
 
   const { error } = await supabase
