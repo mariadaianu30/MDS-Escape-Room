@@ -34,6 +34,9 @@ interface InventoryContextType {
   setCurrentRole: (role: PlayerRole) => void;
   broadcastRoomEvent: (event: string, payload: any) => void;
   onRoomEvent: (event: string, callback: (payload: any) => void) => () => void;
+  clientId: string;
+  username: string;
+  roomPlayers: { id: string; username: string; role: string }[];
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -45,15 +48,11 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [currentRole, setCurrentRoleState] = useState<PlayerRole>("scribe");
   const [isLoaded, setIsLoaded] = useState(false);
   const [username, setUsername] = useState<string>("Explorer");
+  const [roomPlayers, setRoomPlayers] = useState<{ id: string; username: string; role: string }[]>([]);
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
   
-  // Unique client identity to prevent circular broadcast loops
-  const clientIdRef = useRef<string>("");
+  const [clientId] = useState(() => "client_" + Math.random().toString(36).substring(2, 11));
   const listenersRef = useRef<Record<string, Function[]>>({});
-
-  useEffect(() => {
-    clientIdRef.current = "client_" + Math.random().toString(36).substring(2, 11);
-  }, []);
 
   // Fetch logged-in user profile or email fallback
   useEffect(() => {
@@ -155,13 +154,35 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     // Subscribe to multiplayer room channel
     const channel = supabase.channel(`room-inventory-${roomCode}`, {
       config: {
-        broadcast: { self: false }
+        broadcast: { self: false },
+        presence: { key: clientId }
       }
     });
 
     channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const playersList: any[] = [];
+        Object.keys(state).forEach((key) => {
+          const presences = state[key] as any[];
+          presences.forEach((p) => {
+            playersList.push({
+              id: p.id,
+              username: p.username || "Explorer",
+              role: p.role || "scribe"
+            });
+          });
+        });
+        
+        // Deduplicate and sort by ID for stable ordering
+        const uniquePlayers = playersList.filter((p, index, self) => 
+          self.findIndex((pl) => pl.id === p.id) === index
+        ).sort((a, b) => a.id.localeCompare(b.id));
+        
+        setRoomPlayers(uniquePlayers);
+      })
       .on("broadcast", { event: "inventory_sync" }, ({ payload }) => {
-        if (!payload || payload.senderId === clientIdRef.current) return;
+        if (!payload || payload.senderId === clientId) return;
         
         console.log(`[Multiplayer Inventory] Broadcast received:`, payload);
         const name = payload.senderName || "A teammate";
@@ -182,7 +203,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .on("broadcast", { event: "room_event" }, ({ payload }) => {
-        if (!payload || payload.senderId === clientIdRef.current) return;
+        if (!payload || payload.senderId === clientId) return;
         
         console.log(`[Multiplayer Room Event] Broadcast received: ${payload.event}`, payload.payload);
         if (payload.event === "ROLE_ASSIGNED" && payload.payload?.role && payload.payload?.playerName) {
@@ -191,8 +212,15 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         const callbacks = listenersRef.current[payload.event] || [];
         callbacks.forEach((cb) => cb(payload.payload));
       })
-      .subscribe((status) => {
+      .subscribe(async (status) => {
         console.log(`[Multiplayer Inventory] Channel status for ${roomCode}: ${status}`);
+        if (status === "SUBSCRIBED") {
+          await channel.track({
+            id: clientId,
+            username: username,
+            role: currentRole
+          });
+        }
       });
 
     channelRef.current = channel;
@@ -219,7 +247,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         payload: {
           action: "ADD_ITEM",
           item,
-          senderId: clientIdRef.current,
+          senderId: clientId,
           senderName: username
         }
       });
@@ -242,7 +270,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
           action: "REMOVE_ITEM",
           itemId: id,
           itemName,
-          senderId: clientIdRef.current,
+          senderId: clientId,
           senderName: username
         }
       });
@@ -266,7 +294,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         event: "inventory_sync",
         payload: {
           action: "CLEAR_INVENTORY",
-          senderId: clientIdRef.current,
+          senderId: clientId,
           senderName: username
         }
       });
@@ -282,7 +310,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         payload: {
           event,
           payload,
-          senderId: clientIdRef.current
+          senderId: clientId
         }
       });
     }
@@ -301,8 +329,17 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
             role,
             playerName: username,
           },
-          senderId: clientIdRef.current,
+          senderId: clientId,
         },
+      });
+    }
+    
+    // Also update presence state if channel exists
+    if (channelRef.current) {
+      channelRef.current.track({
+        id: clientId,
+        username: username,
+        role: role
       });
     }
   };
@@ -333,7 +370,10 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         currentRole,
         setCurrentRole,
         broadcastRoomEvent,
-        onRoomEvent
+        onRoomEvent,
+        clientId,
+        username,
+        roomPlayers
       }}
     >
       {children}
