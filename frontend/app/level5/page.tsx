@@ -187,6 +187,7 @@ export default function Level5Page() {
 
   const dialRef = useRef<HTMLDivElement>(null);
   const hasClearedStaleLevel5State = useRef(false);
+  const [isRestartingRun, setIsRestartingRun] = useState(false);
 
   // Load state from localStorage on mount/roomCode change
   useEffect(() => {
@@ -403,16 +404,19 @@ export default function Level5Page() {
 
       const { data: player } = await supabase
         .from("player")
-        .select("best_score, username")
+        .select("best_score, remaining_time, username")
         .eq("id", authData.user.id)
         .single();
 
-      const bestScore = Math.max(player?.best_score || 0, stats.score);
+      const isNewBest = stats.score > (player?.best_score || 0);
+      const bestScore = isNewBest ? stats.score : (player?.best_score || 0);
+      const bestRemainingTime = isNewBest ? stats.remainingSeconds : Math.max(player?.remaining_time || 0, stats.remainingSeconds);
+      
       const { error } = await supabase
         .from("player")
         .update({
           current_level: 6,
-          remaining_time: stats.remainingSeconds,
+          remaining_time: bestRemainingTime,
           best_score: bestScore,
         })
         .eq("id", authData.user.id);
@@ -477,6 +481,12 @@ export default function Level5Page() {
   if (victoryStats) {
     return (
       <main className="relative min-h-screen overflow-hidden bg-black font-cinzel text-[#e5d8b3] flex items-center justify-center px-6">
+        {isRestartingRun && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#d4af37] border-t-transparent mb-4" />
+            <p className="text-[#d4af37] tracking-[0.2em] animate-pulse">Restarting Run...</p>
+          </div>
+        )}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-50"
           style={{ backgroundImage: "url('/images/level5_main_bg.jpg')" }}
@@ -509,12 +519,58 @@ export default function Level5Page() {
             </div>
           </div>
 
-          <button
-            onClick={() => router.push("/lobby")}
-            className="mt-10 px-8 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition-colors uppercase tracking-[0.3em] text-xs"
-          >
-            Return to Lobby
-          </button>
+          <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4">
+            <button
+              onClick={resetLevel5ForTesting}
+              className="px-8 py-3 border border-green-700/60 text-green-500/80 hover:bg-green-900/40 transition-colors uppercase tracking-[0.3em] text-[10px]"
+            >
+              Reset Lvl 5 (Debug)
+            </button>
+            <button
+              onClick={() => router.push("/lobby")}
+              className="px-8 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition-colors uppercase tracking-[0.3em] text-xs"
+            >
+              Return to Lobby
+            </button>
+            <button
+              onClick={async () => {
+                setIsRestartingRun(true);
+                try {
+                  // Clear local storage runs
+                  Object.keys(localStorage)
+                    .filter((key) => key.startsWith("escapeRoomLevel") || key.startsWith("escapeRoomState"))
+                    .forEach((key) => localStorage.removeItem(key));
+
+                  localStorage.setItem("escapeRoomCompletedLevel", "0");
+                  localStorage.setItem("escapeRoomTimeLeft", String(GAME_DURATION));
+                  localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+                  localStorage.removeItem("escapeRoomTimeExpired");
+                  localStorage.removeItem("escapeRoomVictoryStats");
+
+                  const isGuestMode = localStorage.getItem("escapeRoomGuestMode") === "1";
+                  const { data: { session } } = await supabase.auth.getSession();
+                  
+                  if (session?.user && !isGuestMode) {
+                    // Update current_level back to 1 but keep best_score and best remaining_time!
+                    // Note: This effectively starts a new run while keeping leaderboard stats intact.
+                    const { error } = await supabase
+                      .from("player")
+                      .update({ current_level: 1, remaining_time: GAME_DURATION })
+                      .eq("id", session.user.id);
+                    if (error) console.error("Replay reset DB error:", error);
+                  }
+                  
+                  router.push("/level1");
+                } catch (e) {
+                  console.error(e);
+                  setIsRestartingRun(false);
+                }
+              }}
+              className="px-8 py-3 border border-[#d4af37] bg-[#d4af37]/10 text-[#f5e8d0] hover:bg-[#d4af37] hover:text-black hover:shadow-[0_0_20px_rgba(212,175,55,0.6)] transition-all uppercase tracking-[0.3em] text-xs font-bold"
+            >
+              Replay Game
+            </button>
+          </div>
         </section>
       </main>
     );

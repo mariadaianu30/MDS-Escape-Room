@@ -8,7 +8,7 @@ import { saveAccountProgress } from "@/lib/progress";
 import { InspectionNarrator } from "@/components/InspectionNarrator";
 import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 
-// 1. MORSE_MAP și PUZZLES rămân aici (sunt constante, e ok să fie afară)
+// 1. MORSE_MAP rămâne aici
 const MORSE_MAP: Record<string, string> = {
   A: ".-", B: "-...", C: "-.-.", D: "-..", E: ".", F: "..-.", G: "--.", H: "....",
   I: "..", J: ".---", K: "-.-", L: ".-..", M: "--", N: "-.", O: "---", P: ".--.",
@@ -25,12 +25,6 @@ interface Puzzle {
   id: number; title: string; flavor: string; type: "morse-decode" | "morse-encode";
   encoded: string; answer: string; successMsg: string;
 }
-
-const PUZZLES: Puzzle[] = [
-  { id: 1, title: "The Riddle of the Crypt", flavor: "A voice echoes from the darkness: 'I am tall when I am young, and short when I am old. What am I?' Encode your answer in Morse code.", type: "morse-encode", encoded: "I am tall when I am young, and short when I am old. What am I?", answer: "-.-. .- -. -.. .-.. .", successMsg: "The candle flickers. A passage opens in the stone wall...", },
-  { id: 2, title: "The Crypt Inscription", flavor: "Upon the stone wall, encrypted in ancient signs, a word lies hidden. Decipher it to unlock the first bolt.", type: "morse-decode", encoded: textToMorse("OPEN"), answer: "OPEN", successMsg: "The first bolt yields. An echo reverberates through the crypt...", },
-  { id: 3, title: "The Archivist's Message", flavor: "A yellowed parchment holds the archivist's final instructions. Only those who know the code may proceed.", type: "morse-decode", encoded: textToMorse("CIPHER"), answer: "CIPHER", successMsg: "Correct! The crypt door swings open — the exit lies ahead!", },
-];
 
 const SCISSORS_ITEM = { id: "crypt-scissors", name: "Ancient Scissors", description: "Rusted scissors...", iconSrc: "/images/scissors.png" };
 const QUILL_ITEM = { id: "crypt-quill", name: "Archivist's Quill", description: "A delicate quill...", iconSrc: "/images/feather_pen.jpg" };
@@ -60,8 +54,11 @@ export default function Level4Page() {
   const [isGameOver, setIsGameOver] = useState(false);
   const [isParchmentUnsealed, setIsParchmentUnsealed] = useState(false);
   const [isQuillUsed, setIsQuillUsed] = useState(false);
+  
+  const [dynamicPuzzles, setDynamicPuzzles] = useState<Puzzle[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const currentPuzzle = PUZZLES[puzzleIndex];
+  const currentPuzzle = dynamicPuzzles[puzzleIndex] || null;
   const hasScissorsInInventory = items.some(i => i.id === SCISSORS_ITEM.id);
   const hasQuillInInventory = items.some(i => i.id === QUILL_ITEM.id);
   const showScissorsOnScreen = stage === "puzzle" && !hasScissorsInInventory && !isParchmentUnsealed;
@@ -86,6 +83,7 @@ export default function Level4Page() {
         if (typeof parsed.isParchmentUnsealed === "boolean") setIsParchmentUnsealed(parsed.isParchmentUnsealed);
         if (typeof parsed.isQuillUsed === "boolean") setIsQuillUsed(parsed.isQuillUsed);
         if (typeof parsed.input === "string") setInput(parsed.input);
+        if (Array.isArray(parsed.dynamicPuzzles)) setDynamicPuzzles(parsed.dynamicPuzzles);
       } catch (e) {
         console.error("Failed to load saved level4 state", e);
       }
@@ -100,10 +98,11 @@ export default function Level4Page() {
       puzzleIndex,
       isParchmentUnsealed,
       isQuillUsed,
-      input
+      input,
+      dynamicPuzzles
     };
     localStorage.setItem(key, JSON.stringify(stateToSave));
-  }, [stage, puzzleIndex, isParchmentUnsealed, isQuillUsed, input, roomCode]);
+  }, [stage, puzzleIndex, isParchmentUnsealed, isQuillUsed, input, dynamicPuzzles, roomCode]);
 
   useEffect(() => {
     if (equippedItem) {
@@ -137,7 +136,7 @@ export default function Level4Page() {
       intervalRef.current = setInterval(() => {
         setCooldown((c) => {
           if (c <= 1) {
-            setHint(null); // <--- ADAUGĂ ACEASTĂ LINIE: Șterge hint-ul când cooldown-ul expiră
+            setHint(null);
             return 0;
           }
           return c - 1;
@@ -146,6 +145,60 @@ export default function Level4Page() {
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [cooldown]);
+
+  const generatePuzzles = async () => {
+    setIsGenerating(true);
+    try {
+      const res = await fetch("/api/level4/generate", { method: "POST" });
+      const data = await res.json();
+      const generated: Puzzle[] = data.puzzles.map((p: any, i: number) => {
+        if (i === 0) {
+          return {
+            id: i + 1,
+            title: "The Riddle of the Crypt",
+            flavor: `A voice echoes from the darkness: '${p.question}' Encode your answer in Morse code.`,
+            type: "morse-encode",
+            encoded: p.question,
+            answer: textToMorse(p.answer),
+            successMsg: "The candle flickers. A passage opens in the stone wall...",
+          };
+        } else if (i === 1) {
+          return {
+            id: i + 1,
+            title: "The Crypt Inscription",
+            flavor: `Upon the stone wall, encrypted in ancient signs, a word lies hidden. Decipher it to unlock the first bolt. (Hint: ${p.question})`,
+            type: "morse-decode",
+            encoded: textToMorse(p.answer),
+            answer: p.answer,
+            successMsg: "The first bolt yields. An echo reverberates through the crypt...",
+          };
+        } else {
+          return {
+            id: i + 1,
+            title: "The Archivist's Message",
+            flavor: `A yellowed parchment holds the archivist's final instructions. Only those who know the code may proceed. (Hint: ${p.question})`,
+            type: "morse-decode",
+            encoded: textToMorse(p.answer),
+            answer: p.answer,
+            successMsg: "Correct! The crypt door swings open — the exit lies ahead!",
+          };
+        }
+      });
+      setDynamicPuzzles(generated);
+    } catch (e) {
+      console.error(e);
+      showNotification("Failed to generate ancient cipher.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const enterCrypt = async () => {
+    setStage("puzzle");
+    if (dynamicPuzzles.length === 0) {
+      await generatePuzzles();
+    }
+  };
 
   const handleParchmentClick = () => {
     if (isParchmentUnsealed) return;
@@ -172,6 +225,7 @@ export default function Level4Page() {
   };
 
   const handleSubmit = useCallback(() => {
+    if (!currentPuzzle) return;
     const isEncode = currentPuzzle.type === "morse-encode";
     const trimmed = isEncode ? input.trim().replace(/\s+/g, " ") : input.trim().toUpperCase();
 
@@ -179,7 +233,7 @@ export default function Level4Page() {
       setSuccessFlash(true); setHint(null);
       setTimeout(() => {
         setSuccessFlash(false);
-        if (puzzleIndex + 1 < PUZZLES.length) {
+        if (puzzleIndex + 1 < dynamicPuzzles.length) {
           setPuzzleIndex((i) => i + 1); setInput("");
         } else {
           localStorage.setItem("escapeRoomCompletedLevel", "4");
@@ -192,7 +246,7 @@ export default function Level4Page() {
     } else {
       setShake(true); setTimeout(() => setShake(false), 500); setInput("");
     }
-  }, [input, currentPuzzle, puzzleIndex]);
+  }, [input, currentPuzzle, puzzleIndex, dynamicPuzzles, roomCode]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleSubmit();
@@ -317,7 +371,7 @@ export default function Level4Page() {
           objects={[
             { id: "crypt", label: "Crypt Walls", level: 4 },
             { id: "sealed_parchment", label: "Sealed Parchment", level: 4, state: { unsealed: isParchmentUnsealed } },
-            { id: "morse_table", label: "Morse Key", level: 4, state: { puzzle: currentPuzzle.id } },
+            { id: "morse_table", label: "Morse Key", level: 4, state: { puzzle: currentPuzzle?.id } },
           ]}
         />
 
@@ -335,14 +389,20 @@ export default function Level4Page() {
             <p className="card-body">
               The Archivist has concealed messages encrypted in Morse code. Find the tools to proceed.
             </p>
-            <button className="btn" onClick={() => setStage("puzzle")}>▶ &nbsp; ENTER THE CRYPT</button>
+            <button className="btn" onClick={enterCrypt}>▶ &nbsp; ENTER THE CRYPT</button>
           </div>
         )}
 
         {stage === "puzzle" && (
+          dynamicPuzzles.length === 0 ? (
+            <div className="card text-center py-10">
+               <p className="card-title text-2xl animate-pulse text-[#c9a84c]">The Archivist is encrypting...</p>
+               <p className="card-body mt-4">Please wait while the ancient mechanisms align and calculate the ciphers.</p>
+            </div>
+          ) : currentPuzzle && (
           <div className="puzzle-wrap">
             <div className="progress-row">
-              {PUZZLES.map((p, i) => (
+              {dynamicPuzzles.map((p, i) => (
                 <div key={p.id} className={`pip ${i < puzzleIndex ? "done" : i === puzzleIndex ? "active" : ""}`} />
               ))}
             </div>
@@ -397,10 +457,27 @@ export default function Level4Page() {
                     </div>
                   )
                 )}
+
+                {/* DEBUG BUTTON */}
+                {isParchmentUnsealed && currentPuzzle && (
+                  <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+                    <button 
+                      onClick={() => {
+                        const dbg = document.getElementById('debug-answer');
+                        if (dbg) dbg.style.display = dbg.style.display === 'none' ? 'block' : 'none';
+                      }}
+                      style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', textDecoration: 'underline', cursor: 'pointer', background: 'none', border: 'none' }}
+                    >
+                      reveal answer (debug)
+                    </button>
+                    <div id="debug-answer" style={{ display: 'none', color: '#ff4444', fontSize: '0.85rem', marginTop: '0.5rem', fontFamily: 'Courier New' }}>
+                      Expected Input: {currentPuzzle.answer}
+                    </div>
+                  </div>
+                )}
                               
               {isOracle ? (
               <div className="hint-section">
-                {/* Afișăm input-ul doar dacă NU suntem în cooldown și nu se încarcă deja un răspuns */}
                 {cooldown === 0 && !hintLoading && (
                     <input 
                       type="text"
@@ -420,7 +497,6 @@ export default function Level4Page() {
                   {cooldown > 0 ? `WAIT (${cooldown}s)` : "🕯 ASK THE SPIRITS"}
                 </button>
 
-                {/* Hint-ul va fi vizibil doar cât timp cooldown-ul este activ */}
                 {hint && cooldown > 0 && (
                   <div className="hint-bubble">
                     <strong>Spirit Voice:</strong> {hint}
@@ -433,7 +509,7 @@ export default function Level4Page() {
             </div>
 
               <div className="morsemap-col">
-                <p className="morsemap-title">Morse Code Key</p>
+                <p className="morsemap-title" style={{ fontFamily: 'Cinzel', fontSize: '1rem', color: 'var(--gold)', marginBottom: '0.8rem' }}>Morse Code Key</p>
                 <div className="morsemap-grid">
                   {Object.entries(MORSE_MAP).filter(([k]) => isNaN(Number(k))).map(([letter, code]) => (
                     <div className="morsemap-row" key={letter}>
@@ -445,11 +521,12 @@ export default function Level4Page() {
               </div>
             </div>
           </div>
+          )
         )}
 
         {stage === "complete" && (
           <div className="complete-wrap">
-            <h2 className="complete-title">The Crypt Is Unsealed!</h2>
+            <h2 className="complete-title" style={{ fontFamily: 'Cinzel', fontSize: '2rem', color: 'var(--gold)' }}>The Crypt Is Unsealed!</h2>
             <button className="btn" onClick={() => router.push("/level5")}>▶ &nbsp; NEXT LEVEL</button>
           </div>
         )}

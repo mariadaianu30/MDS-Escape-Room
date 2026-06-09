@@ -372,15 +372,7 @@ export default function Level1() {
 
 
 
-      {/* Top Header with Save & Exit */}
-      <div className="absolute top-4 left-4 z-50">
-        <button 
-          onClick={handleSaveAndExit}
-          className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-4 py-2 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
-        >
-          Save & Exit
-        </button>
-      </div>
+
 
       {/* Title */}
       <div className="relative z-20 mt-5 mb-2 flex flex-col items-center w-full">
