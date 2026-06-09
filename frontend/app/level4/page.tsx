@@ -34,7 +34,7 @@ const GAME_DURATION = 30 * 60;
 
 export default function Level4Page() {
   const router = useRouter();
-  const { equippedItem, setEquippedItem, removeItem, items, roomCode } = useInventory();
+  const { equippedItem, setEquippedItem, removeItem, items, roomCode, roomPlayers, clientId, onRoomEvent, broadcastRoomEvent } = useInventory();
   const { isArtisan, isScribe, isOracle } = useRoleAccess();
 
   // --- STATE-URI (Toate în interiorul funcției!) ---
@@ -57,6 +57,9 @@ export default function Level4Page() {
   
   const [dynamicPuzzles, setDynamicPuzzles] = useState<Puzzle[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const isReader = !roomCode || (roomPlayers.length > 0 && roomPlayers[0].id === clientId);
+  const isWriter = !roomCode || (roomPlayers.length > 0 ? roomPlayers[0].id !== clientId : true);
 
   const currentPuzzle = dynamicPuzzles[puzzleIndex] || null;
   const hasScissorsInInventory = items.some(i => i.id === SCISSORS_ITEM.id);
@@ -113,6 +116,31 @@ export default function Level4Page() {
     }
     return () => { document.body.style.cursor = "auto"; };
   }, [equippedItem, items]);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    
+    const unsubPuzzles = onRoomEvent("LVL4_PUZZLES", (payload: any) => {
+      setDynamicPuzzles(payload.dynamicPuzzles);
+    });
+    
+    const unsubState = onRoomEvent("LVL4_STATE_SYNC", (payload: any) => {
+      if (payload.stage) setStage(payload.stage);
+      if (payload.puzzleIndex !== undefined) setPuzzleIndex(payload.puzzleIndex);
+      if (payload.isParchmentUnsealed !== undefined) setIsParchmentUnsealed(payload.isParchmentUnsealed);
+      if (payload.isQuillUsed !== undefined) setIsQuillUsed(payload.isQuillUsed);
+    });
+    
+    const unsubInput = onRoomEvent("LVL4_INPUT_SYNC", (payload: any) => {
+      if (typeof payload.input === "string") setInput(payload.input);
+    });
+    
+    return () => {
+      unsubPuzzles();
+      unsubState();
+      unsubInput();
+    };
+  }, [roomCode, onRoomEvent]);
 
   useEffect(() => {
     const endTimeStr = localStorage.getItem("escapeRoomEndTime");
@@ -185,6 +213,9 @@ export default function Level4Page() {
         }
       });
       setDynamicPuzzles(generated);
+      if (roomCode) {
+        broadcastRoomEvent("LVL4_PUZZLES", { dynamicPuzzles: generated });
+      }
     } catch (e) {
       console.error(e);
       showNotification("Failed to generate ancient cipher.");
@@ -195,15 +226,20 @@ export default function Level4Page() {
 
   const enterCrypt = async () => {
     setStage("puzzle");
-    if (dynamicPuzzles.length === 0) {
-      await generatePuzzles();
-    }
+    if (roomCode) broadcastRoomEvent("LVL4_STATE_SYNC", { stage: "puzzle" });
   };
+
+  useEffect(() => {
+    if (stage === "puzzle" && dynamicPuzzles.length === 0 && isReader && !isGenerating) {
+      generatePuzzles();
+    }
+  }, [stage, dynamicPuzzles.length, isReader, isGenerating]);
 
   const handleParchmentClick = () => {
     if (isParchmentUnsealed) return;
     if (equippedItem === SCISSORS_ITEM.id) {
       setIsParchmentUnsealed(true);
+      if (roomCode) broadcastRoomEvent("LVL4_STATE_SYNC", { isParchmentUnsealed: true });
       removeItem(SCISSORS_ITEM.id);
       setEquippedItem(null);
       showNotification("You cut the ancient seal...");
@@ -216,6 +252,7 @@ export default function Level4Page() {
     if (isQuillUsed) return;
     if (equippedItem === QUILL_ITEM.id) {
       setIsQuillUsed(true);
+      if (roomCode) broadcastRoomEvent("LVL4_STATE_SYNC", { isQuillUsed: true });
       removeItem(QUILL_ITEM.id);
       setEquippedItem(null);
       showNotification("The quill hums with power...");
@@ -234,13 +271,20 @@ export default function Level4Page() {
       setTimeout(() => {
         setSuccessFlash(false);
         if (puzzleIndex + 1 < dynamicPuzzles.length) {
-          setPuzzleIndex((i) => i + 1); setInput("");
+          const next = puzzleIndex + 1;
+          setPuzzleIndex(next); 
+          setInput("");
+          if (roomCode) {
+            broadcastRoomEvent("LVL4_STATE_SYNC", { puzzleIndex: next });
+            broadcastRoomEvent("LVL4_INPUT_SYNC", { input: "" });
+          }
         } else {
           localStorage.setItem("escapeRoomCompletedLevel", "4");
           void saveAccountProgress(5);
           const key = roomCode ? `escapeRoomState_lvl4_${roomCode}` : `escapeRoomState_lvl4_single`;
           localStorage.removeItem(key);
           setStage("complete");
+          if (roomCode) broadcastRoomEvent("LVL4_STATE_SYNC", { stage: "complete" });
         }
       }, 1800);
     } else {
@@ -415,23 +459,25 @@ export default function Level4Page() {
                   <div className="sealed-area" onClick={handleParchmentClick}>
                     <p style={{ fontSize: "2.5rem" }}>📜</p>
                     <p className="sealed-text">Sealed Parchment</p>
-                    {isScribe ? (
+                    {isReader ? (
                       <p className="sealed-hint">
                         {equippedItem === SCISSORS_ITEM.id ? "Click here to cut the seal" : "Find the Scissors to unseal it"}
                       </p>
                     ) : (
-                      <RoleBlockedNotice role="scribe" label="The parchment marks are visible only to the Scribe." />
+                      <div className="text-center text-[#c9a84c] italic font-serif mt-2">The sealed marks are visible only to the Reader.</div>
                     )}
                   </div>
                 ) : (
                   <>
-                    {isScribe ? (
+                    {isReader ? (
                       <>
                         <p className="card-body" style={{ marginBottom: "1.5rem" }}>{currentPuzzle.flavor}</p>
                         <div className="morse-display">{currentPuzzle.encoded}</div>
                       </>
                     ) : (
-                      <RoleBlockedNotice role="scribe" label="The encoded inscription is visible only to the Scribe." />
+                      <div className="text-center text-[#c9a84c] italic font-serif py-6 px-4 bg-black/40 rounded border border-[#3d2f1e]">
+                        The encoded inscription is visible only to the Reader. Collaborate via chat to find out the riddle.
+                      </div>
                     )}
                   </>
                 )}
@@ -441,13 +487,16 @@ export default function Level4Page() {
                     <div className="input-row" style={{ marginTop: "1.2rem" }}>
                       <input
                         className="decode-input"
-                        placeholder="Type answer..."
+                        placeholder={isWriter ? "Type answer..." : "Only the Writer can input..."}
                         value={input}
-                        onChange={(e) => setInput(e.target.value)}
+                        onChange={(e) => {
+                          setInput(e.target.value);
+                          if (roomCode) broadcastRoomEvent("LVL4_INPUT_SYNC", { input: e.target.value });
+                        }}
                         onKeyDown={handleKey}
-                        disabled={!isArtisan}
+                        disabled={!isWriter}
                       />
-                      <button className="btn-submit" onClick={handleSubmit} disabled={!isArtisan}>SUBMIT</button>
+                      <button className="btn-submit" onClick={handleSubmit} disabled={!isWriter}>SUBMIT</button>
                     </div>
                   ) : (
                     <div className="write-area" onClick={handleInputAreaClick}>

@@ -166,7 +166,9 @@ type LocalLeaderboardEntry = {
 
 export default function Level5Page() {
   const router = useRouter();
-  const { items, isLoaded: isInventoryLoaded, addItem, removeItem, equippedItem, setEquippedItem, roomCode } = useInventory();
+  const { items, isLoaded: isInventoryLoaded, addItem, removeItem, equippedItem, setEquippedItem, roomCode, roomPlayers, clientId, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const isPlayer1 = !roomCode || (roomPlayers.length > 0 && roomPlayers[0].id === clientId);
+  const isPlayer2 = !roomCode || (roomPlayers.length > 0 && roomPlayers[0].id !== clientId);
   const { isArtisan, isScribe } = useRoleAccess();
   const initialRingRotations = useRef(getRandomRingRotations());
 
@@ -215,18 +217,25 @@ export default function Level5Page() {
   useEffect(() => {
     const key = roomCode ? `escapeRoomState_lvl5_${roomCode}` : `escapeRoomState_lvl5_single`;
     const stateToSave = {
-      view,
-      leverPositions,
-      leversSolved,
-      showNote,
-      ringRotations,
-      chestOpen,
-      altarSlots,
-      doorOpen,
-      victoryStats
+      view, leverPositions, leversSolved, showNote, ringRotations, chestOpen, altarSlots, doorOpen, victoryStats
     };
     localStorage.setItem(key, JSON.stringify(stateToSave));
   }, [view, leverPositions, leversSolved, showNote, ringRotations, chestOpen, altarSlots, doorOpen, victoryStats, roomCode]);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    const unsub = onRoomEvent("LVL5_STATE_SYNC", (payload: any) => {
+      if (payload.leverPositions) setLeverPositions(payload.leverPositions);
+      if (payload.leversSolved !== undefined) setLeversSolved(payload.leversSolved);
+      if (payload.ringRotations) setRingRotations(payload.ringRotations);
+      if (payload.chestOpen !== undefined) setChestOpen(payload.chestOpen);
+      if (payload.altarSlots) setAltarSlots(payload.altarSlots);
+      if (payload.doorOpen !== undefined) setDoorOpen(payload.doorOpen);
+      if (payload.victoryStats) setVictoryStats(payload.victoryStats);
+      if (payload.view) setView(payload.view);
+    });
+    return () => unsub();
+  }, [roomCode, onRoomEvent]);
 
   useEffect(() => {
     if (!isInventoryLoaded) return;
@@ -281,6 +290,7 @@ export default function Level5Page() {
     setLeverPositions(prev => {
       const next = [...prev];
       next[index] = next[index] === "u" ? "d" : "u";
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { leverPositions: next });
       return next;
     });
   };
@@ -289,14 +299,15 @@ export default function Level5Page() {
     if (leversSolved) return;
     if (leverPositions[0] === "d" && leverPositions[1] === "u" && leverPositions[2] === "d") {
       setLeversSolved(true);
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { leversSolved: true });
       showNotification("The stone mechanism unlocks.");
     }
   }, [leverPositions, leversSolved]);
 
   const handleDialClick = (e: React.MouseEvent) => {
     if (chestOpen || !dialRef.current) return;
-    if (!isArtisan) {
-      showNotification("Only the Artisan can rotate the rings.");
+    if (!isPlayer1) {
+      showNotification("Only the first player (Lever Master) can rotate the rings.");
       return;
     }
     const rect = dialRef.current.getBoundingClientRect();
@@ -321,6 +332,7 @@ export default function Level5Page() {
     setRingRotations(prev => {
       const next = [...prev];
       next[ringIdx] = next[ringIdx] + RING_STEP;
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { ringRotations: next });
       return next;
     });
   };
@@ -331,6 +343,7 @@ export default function Level5Page() {
     if (solved) {
       setChestOpen(true);
       setView("chest_full");
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { chestOpen: true, view: "chest_full" });
       showNotification("The alignment is complete. The chest unseals.");
     }
   }, [ringRotations]);
@@ -342,6 +355,10 @@ export default function Level5Page() {
 
   const handleAltarClick = (index: number) => {
     if (doorOpen) return;
+    if (!isPlayer2) {
+      showNotification("Only the second player (Altar Keeper) can place relics.");
+      return;
+    }
     if (altarSlots[index]) {
       const itemId = altarSlots[index]!;
       const item = RELICS.find(i => i.id === itemId);
@@ -349,6 +366,7 @@ export default function Level5Page() {
       setAltarSlots(prev => {
         const next = [...prev];
         next[index] = null;
+        if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { altarSlots: next });
         return next;
       });
     } else if (equippedItem) {
@@ -357,6 +375,7 @@ export default function Level5Page() {
         setAltarSlots(prev => {
           const next = [...prev];
           next[index] = equippedItem;
+          if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { altarSlots: next });
           return next;
         });
         removeItem(equippedItem);
@@ -369,6 +388,7 @@ export default function Level5Page() {
     if (altarSlots[0] === RELIC_LION.id && altarSlots[1] === RELIC_CROSS.id &&
       altarSlots[2] === RELIC_EAGLE.id && altarSlots[3] === RELIC_CROWN.id) {
       setDoorOpen(true);
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { doorOpen: true });
       showNotification("The heavy doors grind open.");
     }
   }, [altarSlots]);
@@ -444,6 +464,7 @@ export default function Level5Page() {
     
     setVictoryStats(stats);
     void saveLeaderboardScore(stats);
+    if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { victoryStats: stats });
 
     confetti({
       particleCount: 220,
@@ -697,13 +718,13 @@ export default function Level5Page() {
                   key={i}
                   index={i}
                   state={position}
-                  onToggle={() => isArtisan ? toggleLever(i) : showNotification("Only the Artisan can move the levers.")}
+                  onToggle={() => isPlayer1 ? toggleLever(i) : showNotification("Only the first player (Lever Master) can move the levers.")}
                 />
               ))}
             </div>
-            {!isArtisan && (
+            {!isPlayer1 && (
               <div className="absolute bottom-24 left-1/2 z-[90] w-[min(420px,80vw)] -translate-x-1/2">
-                <RoleBlockedNotice role="artisan" label="Only the Artisan can move the levers." />
+                <RoleBlockedNotice role="artisan" label="Only the first player (Lever Master) can move the levers." />
               </div>
             )}
           </section>

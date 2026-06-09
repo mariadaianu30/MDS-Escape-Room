@@ -87,6 +87,7 @@ export default function IntroHome() {
     current_level: number;
     remaining_time: number;
     best_score: number;
+    games_played?: number;
   } | null>(null);
 
   const [completedLevel, setCompletedLevel] = useState(0);
@@ -345,6 +346,22 @@ export default function IntroHome() {
           setIsHost(!!(isCreator || isLocalHost));
           setRoomStarted(room.is_started !== false);
 
+          // If joining a completely new/unstarted room, wipe local progress to sync with host at level 1
+          if (room.is_started === false && room.remaining_time === GAME_DURATION) {
+             const previouslyWiped = localStorage.getItem(`escapeRoomWiped_${roomCode}`);
+             if (!previouslyWiped) {
+               clearRunStorage();
+               localStorage.setItem(`escapeRoomWiped_${roomCode}`, "true");
+               setCompletedLevel(0);
+               localStorage.setItem("escapeRoomRoomCode", roomCode); // Restore the roomCode we just wiped!
+               
+               // If this user was somehow the creator, restore the flag
+               if (isCreator || isLocalHost) {
+                 localStorage.setItem(`escapeRoomIsHost_${roomCode}`, "true");
+               }
+             }
+          }
+
           // Subscribe to Postgres changes on this specific room (optional fallback)
           try {
             roomSubscription = supabase
@@ -503,6 +520,12 @@ export default function IntroHome() {
 
   const handleHostRoom = async () => {
     const generatedCode = "ESC-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    setRoomStarted(false); 
+    
+    // Wipe local state so the new room starts fresh at Level 1
+    clearRunStorage();
+    setCompletedLevel(0);
+    
     try {
       const { data: authData } = await supabase.auth.getUser();
       const creatorId = authData?.user?.id || "guest_" + Math.random().toString(36).substring(2, 9);
@@ -518,7 +541,10 @@ export default function IntroHome() {
     } catch (e) {
       // Ignore DB errors if table doesn't exist
     }
+    
+    // Set Host flag AFTER wipe
     localStorage.setItem(`escapeRoomIsHost_${generatedCode}`, "true");
+    
     enterRoomWithRole(generatedCode, "scribe");
   };
 
@@ -563,12 +589,14 @@ export default function IntroHome() {
         const nextGamesPlayed = (userProfile?.games_played || 0) + 1;
         const { error } = await supabase
           .from("player")
-          .update({ current_level: 1, remaining_time: GAME_DURATION, games_played: nextGamesPlayed })
+          .update({ current_level: 1, remaining_time: GAME_DURATION })
           .eq("id", session.user.id);
-        if (error) throw error;
-        setUserProfile(prev => prev ? { ...prev, games_played: nextGamesPlayed } : null);
+        if (error) console.error("DB update failed on replay:", error);
+        else setUserProfile(prev => prev ? { ...prev, games_played: nextGamesPlayed } : null);
       }
-
+    } catch (error) {
+      console.error("Failed to restart run:", error);
+    } finally {
       setCompletedLevel(0);
       setIsGameOver(false);
       setIsAccountRunExpired(false);
@@ -577,10 +605,8 @@ export default function IntroHome() {
         current_level: 1,
         remaining_time: GAME_DURATION
       } : profile);
-    } catch (error) {
-      console.error("Failed to restart run:", error);
-    } finally {
       setIsRestartingRun(false);
+      window.location.reload(); // Hard reset to clear out context caches
     }
   };
 
@@ -631,6 +657,7 @@ export default function IntroHome() {
   const enterRoomWithRole = (code: string, role: PlayerRole) => {
     setRoomCode(code);
     setCurrentRole(role);
+    setRoomStarted(false); // Fix auto-routing bug for joining guests
   };
 
   const copyRoomCodeToClipboard = () => {
@@ -1299,7 +1326,7 @@ export default function IntroHome() {
                            disabled={isRestartingRun}
                            className="w-full rounded-lg border-2 border-red-800 bg-red-950/40 px-5 py-4 text-red-300 transition-colors hover:border-red-500 hover:bg-red-900/60 disabled:cursor-wait disabled:opacity-60"
                         >
-                           {isRestartingRun ? "Restarting Run..." : "Restart Run (Time Expired)"}
+                           {isRestartingRun ? "Restarting..." : "Replay"}
                         </button>
                      )}
                </div>
@@ -1324,7 +1351,7 @@ export default function IntroHome() {
               disabled={isRestartingRun}
               className="text-xl text-[#0a0705] bg-red-800 hover:bg-red-500 transition-colors font-cinzel font-bold px-8 py-3 rounded uppercase tracking-widest"
             >
-              {isRestartingRun ? "Restarting..." : "Restart Run"}
+              {isRestartingRun ? "Restarting..." : "Replay"}
             </button>
           </div>
         </div>

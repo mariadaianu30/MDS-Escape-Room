@@ -94,7 +94,7 @@ export default function PlayerPresenceWidget() {
   if (!roomCode) return null;
 
   return (
-    <div className="fixed top-4 left-[145px] z-50">
+    <div className="fixed top-20 left-4 z-50">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-4 py-2 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl active:scale-95"
