@@ -87,7 +87,7 @@ export default function IntroHome() {
     current_level: number;
     remaining_time: number;
     best_score: number;
-    games_played?: number;
+    games_played: number;
   } | null>(null);
 
   const [completedLevel, setCompletedLevel] = useState(0);
@@ -232,7 +232,8 @@ export default function IntroHome() {
           email: 'guest session',
           current_level: guestCompletedLevel + 1,
           remaining_time: expired ? 0 : timeLeftVal || GAME_DURATION,
-          best_score: 0
+          best_score: 0,
+          games_played: 0
         });
         return;
       }
@@ -256,7 +257,8 @@ export default function IntroHome() {
               username: newUsername,
               current_level: 1,
               best_score: 0,
-              remaining_time: GAME_DURATION
+              remaining_time: GAME_DURATION,
+              games_played: 0
             }])
             .select()
             .maybeSingle();
@@ -290,7 +292,7 @@ export default function IntroHome() {
           username: player?.username || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
           email: session.user.email || '',
           current_level: player?.current_level || 1,
-          remaining_time: player?.remaining_time ?? 1800,
+          remaining_time: accountRemainingTime,
           best_score: player?.best_score || 0,
           games_played: player?.games_played || 0
         });
@@ -306,7 +308,8 @@ export default function IntroHome() {
           email: 'anonymous@catacombs.io',
           current_level: guestCompletedLevel + 1,
           remaining_time: expired ? 0 : timeLeftVal || GAME_DURATION,
-          best_score: 0
+          best_score: 0,
+          games_played: 0
         });
       }
     };
@@ -332,7 +335,7 @@ export default function IntroHome() {
         try {
           const { data } = await supabase
             .from("rooms")
-            .select("created_by, is_started")
+            .select("created_by, is_started, remaining_time")
             .eq("code", roomCode)
             .maybeSingle();
           room = data;
@@ -353,7 +356,7 @@ export default function IntroHome() {
                clearRunStorage();
                localStorage.setItem(`escapeRoomWiped_${roomCode}`, "true");
                setCompletedLevel(0);
-               localStorage.setItem("escapeRoomRoomCode", roomCode); // Restore the roomCode we just wiped!
+                localStorage.setItem("escapeRoomRoomCode", roomCode || ""); // Restore the roomCode we just wiped!
                
                // If this user was somehow the creator, restore the flag
                if (isCreator || isLocalHost) {
