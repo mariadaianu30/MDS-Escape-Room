@@ -13,9 +13,10 @@ reviewing, adapting and accepting all generated changes.
 | Tool | Usage |
 |---|---|
 | ChatGPT / Codex | Code generation, refactoring support, backlog analysis, documentation drafting and test design |
-| Groq API | Runtime AI hint generation through the Next.js `/api/hint` route |
-| Gemini API | Runtime answer validation fallback path through `/api/validate-answer` |
-| Deterministic fallback logic | Local non-LLM behavior for hints, narration and validation when API keys are missing or requests timeout |
+| Groq API | Runtime AI hint generation through `/api/hint`, and dynamic puzzle generation for Level 2 and Level 4 |
+| Gemini API | Semantic answer validation for riddles across levels through `/api/validate-answer` |
+| ElevenLabs API | High-quality atmospheric Text-to-Speech (TTS) voice generation for the game's narrator |
+| Deterministic fallback logic | Local non-LLM behavior for hints, narration, validation, and generation when API keys are missing or requests timeout |
 
 ## Development Contributions
 
@@ -32,13 +33,16 @@ AI assistance was used to scaffold and refine the Python backend layer:
 The generated code was reviewed and verified locally with Python compilation and
 unit tests.
 
-### Frontend AI Routes
+### Frontend AI Features & Routes
 
-AI assistance was used to improve the Next.js serverless AI endpoints:
+AI assistance was used to implement and improve the following Next.js serverless AI endpoints:
 
-- `/api/hint` now supports progressive hint levels, per-player cooldown and local fallback behavior.
-- `/api/validate-answer` now has deterministic validation when Gemini is unavailable.
-- `/api/narrate` provides narrator descriptions with Groq integration and local fallback descriptions.
+- **Semantic Input Validation (`/api/validate-answer`)**: Uses the Gemini API (`gemini-flash-latest`) to semantically validate player inputs against expected concepts across levels. It allows for typos, variations, and creative descriptions without strict hardcoded matching, and returns atmospheric feedback. Deterministic fallback provided.
+- **Dynamic Content Generation Level 2 (`/api/level2/generate`)**: Uses Groq (`llama-3.1-8b-instant`) to dynamically generate an alchemical journal with a mystic title, 3 puzzle gates, and 3 chemistry-themed riddles (anagram, cipher, and direct question) in a strict JSON format. 
+- **Dynamic Content Generation Level 4 (`/api/level4/generate`)**: Uses Groq (`llama-3.1-8b-instant`) to dynamically create 3 random short-word puzzle questions specifically sanitized for the final stage.
+- **ElevenLabs Voice Integration (`/api/tts`)**: Implemented a creepy, atmospheric Text-to-Speech using the `eleven_multilingual_v2` model and the specific voice ID for Callum ("N2lVS1w4EtoT3dr4eOWO"). Audio parameters (stability 0.5, similarity_boost 0.75) are fine-tuned for a raspy, intense narration that buffers directly to the frontend.
+- **Progressive Hints (`/api/hint`)**: Supports progressive hint levels, per-player cooldown and local fallback behavior.
+- **Narrator Descriptions (`/api/narrate`)**: Provides narrator descriptions with Groq integration and local fallback descriptions.
 - `AIHintDialog` sends a stable `playerId` and `puzzleId` so hint progression is tracked consistently.
 
 ### Final Game Flow
