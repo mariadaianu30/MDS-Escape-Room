@@ -526,7 +526,7 @@ The full report includes the specific prompts used, the outputs produced, and an
 
 Click the preview below to watch the project demonstration on YouTube:
 
-[![Project Demo](https://youtu.be/M_nCI4snkO0)
+[![Project Demo](https://img.youtube.com/vi/M_nCI4snkO0/0.jpg)](https://www.youtube.com/watch?v=M_nCI4snkO0)
 
 ### 📌 Video Navigation (Timestamps)
 
