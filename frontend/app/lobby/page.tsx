@@ -87,6 +87,7 @@ export default function IntroHome() {
     current_level: number;
     remaining_time: number;
     best_score: number;
+    games_played: number;
   } | null>(null);
 
   const [completedLevel, setCompletedLevel] = useState(0);
@@ -221,7 +222,8 @@ export default function IntroHome() {
           email: 'guest session',
           current_level: guestCompletedLevel + 1,
           remaining_time: expired ? 0 : timeLeftVal || GAME_DURATION,
-          best_score: 0
+          best_score: 0,
+          games_played: 0
         });
         return;
       }
@@ -245,7 +247,8 @@ export default function IntroHome() {
               username: newUsername,
               current_level: 1,
               best_score: 0,
-              remaining_time: GAME_DURATION
+              remaining_time: GAME_DURATION,
+              games_played: 0
             }])
             .select()
             .maybeSingle();
@@ -280,7 +283,8 @@ export default function IntroHome() {
           email: session.user.email || '',
           current_level: player?.current_level || 1,
           remaining_time: accountRemainingTime,
-          best_score: player?.best_score || 0
+          best_score: player?.best_score || 0,
+          games_played: player?.games_played || 0
         });
       } else {
         const guestCompletedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
@@ -294,7 +298,8 @@ export default function IntroHome() {
           email: 'anonymous@catacombs.io',
           current_level: guestCompletedLevel + 1,
           remaining_time: expired ? 0 : timeLeftVal || GAME_DURATION,
-          best_score: 0
+          best_score: 0,
+          games_played: 0
         });
       }
     };
