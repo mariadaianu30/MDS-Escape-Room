@@ -276,8 +276,19 @@ function ConstellationBoard({
 // ─── Main Level 3 ─────────────────────────────────────────────────────────────
 export default function Level3() {
   const router = useRouter();
-  const { removeItem, equippedItem, setEquippedItem, items } = useInventory();
-  const { isArtisan, isScribe } = useRoleAccess();
+  const { removeItem, equippedItem, setEquippedItem, items, roomCode, broadcastRoomEvent, onRoomEvent, roomPlayers } = useInventory();
+  const { currentRole, isSinglePlayer } = useRoleAccess();
+  
+  const ROLE_CONSTELLATION_MAP: Record<string, string> = { 
+    "oracle": "orion", 
+    "scribe": "cassiopeia", 
+    "artisan": "ursamajor" 
+  };
+  const ROLE_NAMES: Record<string, string> = {
+    "orion": "Oracle",
+    "cassiopeia": "Scribe",
+    "ursamajor": "Artisan"
+  };
 
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [isGameOver, setIsGameOver] = useState(false);
@@ -298,6 +309,49 @@ export default function Level3() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  // Load state from localStorage on mount/roomCode change
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.lensInserted === "boolean") setLensInserted(parsed.lensInserted);
+        if (typeof parsed.activeConstellation === "string" || parsed.activeConstellation === null) setActiveConstellation(parsed.activeConstellation);
+        if (parsed.solvedConnections) setSolvedConnections(parsed.solvedConnections);
+        if (typeof parsed.wrongPicks === "number") setWrongPicks(parsed.wrongPicks);
+      } catch (e) {
+        console.error("Failed to load saved level3 state", e);
+      }
+    }
+  }, [roomCode]);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    const unsub = onRoomEvent("CONSTELLATION_SYNC", (payload: any) => {
+      if (payload.solvedConnections) setSolvedConnections(payload.solvedConnections);
+      if (typeof payload.wrongPicks === "number") setWrongPicks(payload.wrongPicks);
+      if (payload.wrongFlashConstellation) {
+        setActiveConstellation(payload.wrongFlashConstellation);
+        setWrongFlash(true);
+        setTimeout(() => setWrongFlash(false), 600);
+      }
+    });
+    return () => unsub();
+  }, [roomCode, onRoomEvent]);
+
+  // Save Level 3 state to localStorage when any state changes
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+    const stateToSave = {
+      lensInserted,
+      activeConstellation,
+      solvedConnections,
+      wrongPicks
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [lensInserted, activeConstellation, solvedConnections, wrongPicks, roomCode]);
+
   useEffect(() => {
     const endTimeStr = localStorage.getItem("escapeRoomEndTime");
     if (!endTimeStr) { router.push("/"); return; }
@@ -312,6 +366,36 @@ export default function Level3() {
     }
     return () => { document.body.style.cursor = "auto"; };
   }, [equippedItem, items]);
+
+  useEffect(() => {
+    // Check win condition whenever solvedConnections changes
+    const requiredConstellations = isSinglePlayer || !roomPlayers || roomPlayers.length === 0 
+      ? ["orion"] 
+      : roomPlayers.map(p => ROLE_CONSTELLATION_MAP[p.role.toLowerCase()]).filter(Boolean);
+
+    if (requiredConstellations.length > 0) {
+      const allDone = requiredConstellations.every(cid => {
+        const targetCon = CONSTELLATIONS.find(c => c.id === cid);
+        if (!targetCon) return false;
+        return targetCon.correctConnections.every(([a,b]) => 
+          solvedConnections[cid]?.some(([x,y]) => (x===a && y===b) || (x===b && y===a))
+        );
+      });
+
+      if (allDone && !showLevelComplete) {
+        const savedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
+        if (savedLevel < 3) localStorage.setItem("escapeRoomCompletedLevel", "3");
+        void saveAccountProgress(4);
+        const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+        localStorage.removeItem(key);
+        confetti({ particleCount: 200, spread: 160, origin: { y: 0.5 }, colors: ["#b8d4f0", "#d4af37", "#ffffff"] });
+        setShowLevelComplete(true);
+        setTimeout(() => {
+          router.push("/level4");
+        }, 5000);
+      }
+    }
+  }, [solvedConnections, roomPlayers, isSinglePlayer, showLevelComplete, roomCode, router]);
 
   useEffect(() => {
     if (isGameOver || showLevelComplete) return;
@@ -358,8 +442,10 @@ export default function Level3() {
           setSolvedConnections({});
           setWrongPicks(0);
           setActiveConstellation(null);
+          broadcastRoomEvent("CONSTELLATION_SYNC", { solvedConnections: {}, wrongPicks: 0 });
         }, 1500);
       }
+      broadcastRoomEvent("CONSTELLATION_SYNC", { solvedConnections, wrongPicks: newWrong, wrongFlashConstellation: constellationId });
       return;
     }
 
@@ -367,6 +453,7 @@ export default function Level3() {
     const prev = solvedConnections[constellationId] || [];
     const updated = { ...solvedConnections, [constellationId]: [...prev, pair] };
     setSolvedConnections(updated);
+    broadcastRoomEvent("CONSTELLATION_SYNC", { solvedConnections: updated, wrongPicks });
 
     const con = CONSTELLATIONS.find(c => c.id === constellationId)!;
     const done = con.correctConnections.every(([a, b]) =>
@@ -374,18 +461,7 @@ export default function Level3() {
     );
 
     if (done) {
-      if (con.isCorrect) {
-        // WIN!
-        const savedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
-        if (savedLevel < 3) localStorage.setItem("escapeRoomCompletedLevel", "3");
-        void saveAccountProgress(4);
-        confetti({ particleCount: 200, spread: 160, origin: { y: 0.5 }, colors: ["#b8d4f0", "#d4af37", "#ffffff"] });
-        setTimeout(() => setShowLevelComplete(true), 1800);
-      } else {
-        // Wrong constellation completed: reset it
-        showNotification(`That is ${con.name}, not the lost constellation. Study the clue again.`);
-        setTimeout(() => setSolvedConnections(prev => ({ ...prev, [constellationId]: [] })), 1200);
-      }
+      showNotification(`${con.name} is aligned.`);
     }
   };
 
@@ -396,8 +472,11 @@ export default function Level3() {
     setActiveConstellation(null);
     setSolvedConnections({});
     setWrongPicks(0);
+    broadcastRoomEvent("CONSTELLATION_SYNC", { solvedConnections: {}, wrongPicks: 0 });
     setShowLevelComplete(false);
     setGameId(prev => prev + 1);
+    const key = roomCode ? `escapeRoomState_lvl3_${roomCode}` : `escapeRoomState_lvl3_single`;
+    localStorage.removeItem(key);
   };
 
   const formatElapsed = (seconds: number) => {
@@ -461,7 +540,7 @@ export default function Level3() {
           {/* Clue scroll */}
           <div className="bg-[#0a0e1a]/75 border border-[#d4af37]/35 rounded-lg p-5 md:p-6 shadow-[0_0_34px_rgba(212,175,55,0.1)] bg-[url('https://www.transparenttextures.com/patterns/parchment.png')]">
             <h2 className="font-cinzel text-[#d4af37] text-[11px] tracking-[0.4em] uppercase mb-2">Ancient Scroll</h2>
-            {isScribe ? (
+            {isSinglePlayer || currentRole === "scribe" ? (
               <p className="text-lg md:text-2xl text-[#e5d8b3] italic leading-tight font-medium">
                 "{CORRECT_CONSTELLATION.clue}"
               </p>
@@ -535,25 +614,27 @@ export default function Level3() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-4">
             {CONSTELLATIONS.map(con => {
               const isWinning = con.isCorrect && (solvedConnections[con.id]?.length || 0) === con.correctConnections.length;
+              const isMyConstellation = isSinglePlayer || ROLE_CONSTELLATION_MAP[currentRole] === con.id;
+              
               return (
                 <div key={con.id} className="flex flex-col gap-2">
                   <button
-                    onClick={() => lensInserted && isArtisan && setActiveConstellation(activeConstellation === con.id ? null : con.id)}
+                    onClick={() => lensInserted && isMyConstellation && setActiveConstellation(activeConstellation === con.id ? null : con.id)}
                     className={`font-cinzel text-xs tracking-widest uppercase py-2 px-4 rounded-lg border transition-all duration-300
                       ${activeConstellation === con.id
                         ? "border-[#6b9fd4] bg-[#0a1828] text-[#b8d4f0] shadow-[0_0_15px_rgba(107,159,212,0.3)]"
                         : "border-[#1e3550]/50 bg-black/30 text-[#6b9fd4]/50 hover:border-[#2b5070] hover:text-[#8aa1b8]"}
                     `}
-                    disabled={!lensInserted || !isArtisan}
+                    disabled={!lensInserted || !isMyConstellation}
                   >
                     {con.name}
                   </button>
-                  {!isArtisan && lensInserted && <RoleBlockedNotice role="artisan" label="Only the Artisan can trace the stars." />}
+                  {!isMyConstellation && lensInserted && <RoleBlockedNotice role={ROLE_NAMES[con.id].toLowerCase() as any} label={`Only the ${ROLE_NAMES[con.id]} can trace ${con.name}.`} />}
 
                   <div style={isWinning ? { animation: 'constellation-glow 2s ease-in-out infinite' } : {}}>
                     <ConstellationBoard
                       constellation={con}
-                      active={isArtisan && activeConstellation === con.id}
+                      active={isMyConstellation && activeConstellation === con.id}
                       solvedConnections={solvedConnections[con.id] || []}
                       wrongFlash={wrongFlash && activeConstellation === con.id}
                       onConnectionMade={(isCorrect, pair) => handleConnectionMade(con.id, isCorrect, pair)}
@@ -586,16 +667,12 @@ export default function Level3() {
           <div className="p-12 border-4 border-[#6b9fd4] bg-[#05101e]/95 text-center rounded-2xl shadow-[0_0_150px_rgba(107,159,212,0.4)] max-w-2xl flex flex-col items-center">
             <h1 className="text-5xl md:text-7xl font-cinzel font-bold text-[#b8d4f0] mb-6">Chamber Unlocked</h1>
             <p className="text-xl text-[#8aa1b8] mb-6 font-cormorant leading-relaxed">
-              Orion blazes across the dome. The ancient seal hums and releases with a deep resonant tone.
+              The constellations blaze across the dome. The ancient seal hums and releases with a deep resonant tone.
             </p>
-            <div className="bg-black/60 p-6 rounded-lg border border-[#2b4a7e] mb-8 w-full">
+            <div className="bg-black/60 p-6 rounded-lg border border-[#2b4a7e] w-full">
               <p className="text-2xl text-[#6b9fd4] font-bold mb-2">Escaped in {formatElapsed(GAME_DURATION - timeLeft)}!</p>
               <p className="text-lg text-[#8aa1b8]">Time remaining: {formatElapsed(timeLeft)}</p>
             </div>
-            <button onClick={() => router.push("/level4")}
-              className="text-xl text-[#05060a] bg-[#b8d4f0] hover:bg-white transition-colors font-cinzel font-bold px-8 py-4 rounded-xl uppercase tracking-widest animate-pulse">
-              Proceed to Level 4
-            </button>
           </div>
         </div>
       )}

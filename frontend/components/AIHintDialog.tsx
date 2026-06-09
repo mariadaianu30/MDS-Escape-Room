@@ -37,6 +37,24 @@ export default function AIHintDialog() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
+  const playTTS = async (text: string) => {
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.play().catch(e => console.error("Audio autoplay blocked", e));
+      }
+    } catch (e) {
+      console.error("Failed to play TTS", e);
+    }
+  };
+
   useEffect(() => {
     const savedUsername = localStorage.getItem("escapeRoomUsername");
     if (savedUsername) {
@@ -152,6 +170,17 @@ export default function AIHintDialog() {
     broadcastRoomEvent("CHAT_MESSAGE", { role: "user", content: userMsg, sender: username });
     setIsLoading(true);
 
+    // Citim contextul dinamic pentru nivelul curent dacă există
+    const roomCode = localStorage.getItem("escapeRoomRoomCode");
+    const dynKey = roomCode ? `escapeRoomState_level${currentLevel}_dynamic_${roomCode}` : `escapeRoomState_lvl${currentLevel}_dynamic_single`;
+    // Nota: level2 folosește 'escapeRoomState_lvl2_dynamic_single'
+    const altDynKey = roomCode ? `escapeRoomState_lvl${currentLevel}_dynamic_${roomCode}` : `escapeRoomState_lvl${currentLevel}_dynamic_single`;
+    const dynDataStr = localStorage.getItem(dynKey) || localStorage.getItem(altDynKey);
+    let dynamicContext = null;
+    if (dynDataStr) {
+      try { dynamicContext = JSON.parse(dynDataStr); } catch (e) {}
+    }
+
     try {
       const res = await fetch("/api/hint", {
         method: "POST",
@@ -161,6 +190,7 @@ export default function AIHintDialog() {
           puzzleId: currentPuzzleId,
           playerId: getPlayerId(),
           userQuestion: userMsg,
+          dynamicContext
         }),
       });
 
@@ -171,6 +201,9 @@ export default function AIHintDialog() {
       
       setMessages((prev) => [...prev, spiritMessage]);
       broadcastRoomEvent("CHAT_MESSAGE", spiritMessage);
+      
+      // Play TTS only for the user who sent the message
+      playTTS(data.hint);
     } catch (err) {
       setMessages((prev) => [...prev, { role: "spirit", content: "The spirits are silent... check your connection." }]);
     } finally {

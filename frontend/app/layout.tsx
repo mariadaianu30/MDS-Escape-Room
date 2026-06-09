@@ -8,6 +8,8 @@ import Timer from "@/components/Timer";
 import AIHintDialog from "@/components/AIHintDialog";
 import NarratorDialog from "@/components/NarratorDialog";
 import RouteGuard from "@/components/RouteGuard";
+import GlobalMultiplayerWidgets from "@/components/GlobalMultiplayerWidgets";
+import SaveAndExit from "@/components/SaveAndExit";
 
 export const metadata: Metadata = {
   title: "Escape Room",
@@ -26,16 +28,18 @@ export default function RootLayout({
       </head>
       <body className="font-cormorant">
         <AudioProvider>
-          <TimerProvider>
-            <InventoryProvider>
+          <InventoryProvider>
+            <TimerProvider>
               <RouteGuard />
               {children}
               <Inventory />
               <Timer />
+              <SaveAndExit />
               <AIHintDialog />
               <NarratorDialog />
-            </InventoryProvider>
-          </TimerProvider>
+              <GlobalMultiplayerWidgets />
+            </TimerProvider>
+          </InventoryProvider>
         </AudioProvider>
       </body>
     </html>

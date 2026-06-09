@@ -514,19 +514,78 @@ A detailed report is maintained in [`docs/ai-usage-report.md`](docs/ai-usage-rep
 
 | Phase | Tools Used | What Was Generated |
 |---|---|---|
-| **Requirements** | ChatGPT, Claude | User stories, acceptance criteria |
-| **Architecture** | Claude| Component diagrams, ERD, sequence diagrams |
-| **Documentation** | Claude | README structure, docstrings, inline comments |
+| **Requirements & Brainstorming** | ChatGPT, Claude | User stories, acceptance criteria, backlog structure |
+| **Architecture** | Claude, Antigravity | Component diagrams, ERD, UML sequence diagrams, Mermaid workflow visuals |
+| **Code Generation & Refactoring** | Codex, ChatGPT | Backend route scaffolding, agent logic, React components, WebSocket handlers |
+| **Debugging** | ChatGPT, Claude | Identifying logic errors in agent responses, fixing real-time sync edge cases |
+| **Test Design & Automation** | Codex, Claude | Pytest unit tests, Playwright e2e test scaffolding, agent evaluation suites |
+| **CI/CD** | ChatGPT, Claude | GitHub Actions workflow configuration, coverage thresholds, pipeline debugging |
+| **Documentation** | Claude | README structure, docstrings, inline comments, multiplayer backlog |
 
-The full report includes the specific prompts used, the outputs produced, and an honest assessment of where AI accelerated development and where manual correction was necessary — including cases where generated code was incorrect and had to be revised.
+---
+
+### AI in the Application Itself
+
+Beyond development tooling, AI is a core part of the application runtime through three specialised agents:
+
+- **Puzzle Agent** — validates player solutions and assigns difficulty ratings via a language model
+- **Hint Agent** — generates progressive, context-aware hints calibrated to the player's current progress without ever revealing the solution
+- **Narrator Agent** — produces atmospheric Victorian-style descriptions of rooms and objects, varied across repeated queries to prevent repetition
+
+These agents operate statelessly and share a strict 3-second response SLA. Game context is injected per request, making each agent independently testable and replaceable.
+
+---
+
+### Multiplayer & Real-Time Features
+
+AI assistance was also used during the design and implementation of the multiplayer extension, including WebSocket synchronisation logic, shared team inventory, asymmetric role assignment, and the real-time leaderboard backed by Supabase.
+
+---
+
+### Validation and Responsibility
+
+All AI-generated code was reviewed by at least one team member, validated against the test suite, and required to pass the full CI pipeline before merging. Where generated output was incorrect or incomplete, it was revised manually and the correction documented in [`docs/ai-usage-report.md`](docs/ai-usage-report.md). AI accelerated delivery across all sprints, but every architectural and design decision remained with the team.
 
 ---
 
 ## Demo
 
-> A recorded screencast demonstrating the complete gameplay — room exploration, puzzle solving, AI hint interaction, and final escape — will be linked here before the final presentation.
+<div align="center">
+
+[![Watch the Demo](https://img.youtube.com/vi/M_nCI4snkO0/maxresdefault.jpg)](https://www.youtube.com/watch?v=M_nCI4snkO0)
+
+*Click to watch on YouTube*
+
+</div>
+
+### Video Navigation
+
+| Timestamp | Section |
+|----------:|---------|
+| `00:00` | Introduction & Login |
+| `00:48` | Creating a Multiplayer Room |
+| `01:00` | Joining a Room & Selecting a Role |
+| `01:25` | Level 1 |
+| `11:44` | Level 2 |
+| `14:08` | Level 3 |
+| `14:50` | Chatting with the Oracle (AI Hint Agent) |
+| `15:10` | Chamber Chat — In-Game Player Communication |
+| `15:28` | Level 4 |
+| `16:00` | Chamber Chat — Technical Walkthrough |
+| `17:45` | Level 5 |
 
 ---
+
+### What to Look For
+
+- **AI Hint System** — observe how the Oracle delivers progressively escalating hints without ever revealing the solution directly.
+- **Multiplayer Synchronization** — room state, inventory, and puzzle progress update in real time across all connected players via WebSockets.
+- **Asymmetric Roles** — each player joins as a distinct role (Scribe, Artisan, Oracle), requiring verbal coordination to solve puzzles collaboratively.
+- **Narrator Descriptions** — atmospheric Victorian-style descriptions are generated on demand as players inspect objects and areas.
+
+---
+
+> *Can you escape before time runs out?*
 
 
 <p align="center">

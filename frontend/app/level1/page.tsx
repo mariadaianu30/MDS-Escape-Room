@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SudokuGrid from "@/components/SudokuGrid";
 import CombinationLock from "@/components/CombinationLock";
@@ -12,6 +12,8 @@ import { InspectionNarrator } from "@/components/InspectionNarrator";
 import { RoleBlockedNotice, useRoleAccess } from "@/components/RoleGate";
 import { createClient } from '@supabase/supabase-js'
 import { saveAccountProgress } from "@/lib/progress";
+import { generateSudoku } from "@/lib/sudoku";
+import { useRealtimeSudoku } from "@/lib/useRealtimeSudoku";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,10 +21,13 @@ const supabase = createClient(
 )
 
 const GAME_DURATION = 30 * 60;
+type SudokuGridState = number[][];
+const cloneGrid = (grid: SudokuGridState) => grid.map((row) => [...row]);
 
 export default function Level1() {
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  const { hasItem, items, equippedItem, setEquippedItem, removeItem, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const { hasItem, items, equippedItem, setEquippedItem, removeItem, roomCode, onRoomEvent, broadcastRoomEvent, clientId, roomPlayers } = useInventory();
   const { isArtisan, isScribe } = useRoleAccess();
   const hasCompass = hasItem("brass_compass_lvl1");
   const hasEraser = hasItem("chalk_eraser_lvl1");
@@ -33,17 +38,186 @@ export default function Level1() {
   const [isBlackboardCleaned, setIsBlackboardCleaned] = useState(false);
   const [isLockUnjammed, setIsLockUnjammed] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const sharedSudoku = useMemo(
+    () => generateSudoku(roomCode ? `room:${roomCode}:level1:sudoku:${gameId}` : undefined),
+    [roomCode, gameId]
+  );
+  const [sudokuUserGrid, setSudokuUserGrid] = useState<SudokuGridState | null>(null);
+  const [sudokuMistakes, setSudokuMistakes] = useState(0);
+  const [isSudokuCompleted, setIsSudokuCompleted] = useState(false);
+  const [lastSudokuClientId, setLastSudokuClientId] = useState<string | null>(null);
+  const [currentTurnClientId, setCurrentTurnClientId] = useState<string | null>(null);
+  const [remoteUpdates, setRemoteUpdates] = useState<Array<{ row: number; col: number; value: number; username: string }>>([]);
+  const latestStateRef = useRef<any>(null);
+  const latestSudokuGridRef = useRef<SudokuGridState | null>(null);
+
+  // Compute the effectively active turn
+  const activeTurnClientId = useMemo(() => {
+    if (!roomCode) return clientId; // Single player
+    if (roomPlayers.length === 0) return clientId; // Fallback
+    if (currentTurnClientId && roomPlayers.some(p => p.id === currentTurnClientId)) {
+      return currentTurnClientId;
+    }
+    // Default to first player
+    return roomPlayers[0].id;
+  }, [roomCode, roomPlayers, currentTurnClientId, clientId]);
+
+  const activeTurnPlayer = useMemo(() => {
+    return roomPlayers.find(p => p.id === activeTurnClientId);
+  }, [roomPlayers, activeTurnClientId]);
+
+  // Real-time sudoku sync hook
+  const { broadcastSudokuUpdate } = useRealtimeSudoku(
+    roomCode,
+    1,
+    (update) => {
+      setRemoteUpdates((prev) => [...prev, update]);
+    }
+  );
   
   const showNotification = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
   };
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.isBlackboardCleaned === "boolean") setIsBlackboardCleaned(parsed.isBlackboardCleaned);
+        if (typeof parsed.isLockUnjammed === "boolean") setIsLockUnjammed(parsed.isLockUnjammed);
+        if (typeof parsed.isUnlocked === "boolean") setIsUnlocked(parsed.isUnlocked);
+        if (typeof parsed.extractedCode === "string" || parsed.extractedCode === null) setExtractedCode(parsed.extractedCode);
+        if (Array.isArray(parsed.sudokuUserGrid)) {
+          setSudokuUserGrid(parsed.sudokuUserGrid);
+          latestSudokuGridRef.current = parsed.sudokuUserGrid;
+        }
+        if (typeof parsed.lastSudokuClientId === "string") setLastSudokuClientId(parsed.lastSudokuClientId);
+        if (typeof parsed.currentTurnClientId === "string") setCurrentTurnClientId(parsed.currentTurnClientId);
+        if (typeof parsed.sudokuMistakes === "number") setSudokuMistakes(parsed.sudokuMistakes);
+        if (typeof parsed.isSudokuCompleted === "boolean") setIsSudokuCompleted(parsed.isSudokuCompleted);
+        return;
+      } catch (e) {
+        console.error("Failed to parse level 1 state", e);
+      }
+    }
+
+    setSudokuUserGrid(cloneGrid(sharedSudoku.puzzle));
+    latestSudokuGridRef.current = cloneGrid(sharedSudoku.puzzle);
+    setSudokuMistakes(0);
+    setIsSudokuCompleted(false);
+    setLastSudokuClientId(null);
+    setCurrentTurnClientId(null);
+    setIsBlackboardCleaned(false);
+    setIsLockUnjammed(false);
+    setIsUnlocked(false);
+    setExtractedCode(null);
+  }, [sharedSudoku, roomCode]);
+
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    const stateToSave = {
+      isBlackboardCleaned,
+      isLockUnjammed,
+      isUnlocked,
+      extractedCode,
+      sudokuUserGrid,
+      sudokuMistakes,
+      isSudokuCompleted,
+      lastSudokuClientId,
+      currentTurnClientId
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted, roomCode, lastSudokuClientId, currentTurnClientId]);
+
+  useEffect(() => {
+    latestStateRef.current = {
+      blackboardCleaned: isBlackboardCleaned,
+      lockUnjammed: isLockUnjammed,
+      doorUnlocked: isUnlocked,
+      extractedCode,
+      sudokuGrid: sudokuUserGrid,
+      sudokuMistakes,
+      sudokuCompleted: isSudokuCompleted,
+      lastSudokuClientId,
+      currentTurnClientId
+    };
+  }, [isBlackboardCleaned, isLockUnjammed, isUnlocked, extractedCode, sudokuUserGrid, sudokuMistakes, isSudokuCompleted, lastSudokuClientId, currentTurnClientId]);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    const requestTimer = window.setTimeout(() => {
+      broadcastRoomEvent("LEVEL1_STATE_REQUEST", {});
+    }, 600);
+    return () => window.clearTimeout(requestTimer);
+    // Request room state only when entering or changing multiplayer room.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode]);
+
   // Game Over states
   const [isGameOver, setIsGameOver] = useState(false);
 
   // Real-time Multiplayer Sync for Room States
   useEffect(() => {
+    const unsubStateRequest = onRoomEvent("LEVEL1_STATE_REQUEST", () => {
+      if (latestStateRef.current) {
+        broadcastRoomEvent("LEVEL1_STATE_SYNC", latestStateRef.current);
+      }
+    });
+    const unsubStateSync = onRoomEvent("LEVEL1_STATE_SYNC", (payload: any) => {
+      if (!payload) return;
+      if (typeof payload.blackboardCleaned === "boolean") setIsBlackboardCleaned(payload.blackboardCleaned);
+      if (typeof payload.lockUnjammed === "boolean") setIsLockUnjammed(payload.lockUnjammed);
+      if (typeof payload.doorUnlocked === "boolean") setIsUnlocked(payload.doorUnlocked);
+      if (typeof payload.extractedCode === "string") setExtractedCode(payload.extractedCode);
+      if (Array.isArray(payload.sudokuGrid)) {
+        latestSudokuGridRef.current = payload.sudokuGrid;
+        setSudokuUserGrid(payload.sudokuGrid);
+      }
+      if (typeof payload.sudokuMistakes === "number") setSudokuMistakes(payload.sudokuMistakes);
+      if (typeof payload.sudokuCompleted === "boolean") setIsSudokuCompleted(payload.sudokuCompleted);
+      if (typeof payload.lastSudokuClientId === "string") setLastSudokuClientId(payload.lastSudokuClientId);
+      if (typeof payload.currentTurnClientId === "string") setCurrentTurnClientId(payload.currentTurnClientId);
+    });
+    const unsubSudokuMove = onRoomEvent("SUDOKU_MOVE_LVL1", (payload: any) => {
+      if (Array.isArray(payload?.grid)) {
+        latestSudokuGridRef.current = payload.grid;
+        setSudokuUserGrid(payload.grid);
+      }
+      if (payload.clientId) setLastSudokuClientId(payload.clientId);
+      if (payload.nextClientId) setCurrentTurnClientId(payload.nextClientId);
+    });
+    const unsubSudokuMistake = onRoomEvent("SUDOKU_MISTAKE_LVL1", (payload: any) => {
+      if (typeof payload?.mistakes === "number") {
+        setSudokuMistakes(payload.mistakes);
+        if (payload.mistakes >= 3) {
+          handleMistakesGameOver(false);
+        }
+      }
+      if (payload.clientId) setLastSudokuClientId(payload.clientId);
+      if (payload.nextClientId) setCurrentTurnClientId(payload.nextClientId);
+    });
+    const unsubSudokuSolved = onRoomEvent("SUDOKU_SOLVED_LVL1", (payload: any) => {
+      if (Array.isArray(payload?.grid)) {
+        latestSudokuGridRef.current = payload.grid;
+        setSudokuUserGrid(payload.grid);
+      }
+      if (typeof payload?.code === "string") {
+        handleSudokuSolved(payload.code, false);
+      }
+      setIsSudokuCompleted(true);
+      showNotification("The Artisan solved the cipher grid.");
+    });
+    const unsubSudokuReset = onRoomEvent("SUDOKU_RESET_LVL1", () => {
+      setIsGameOver(true);
+      setTimeout(() => restartGame(false), 4000);
+    });
     const unsubClean = onRoomEvent("BLACKBOARD_CLEANED", () => {
       setIsBlackboardCleaned(true);
       showNotification("Teammate wiped the blackboard clean!");
@@ -72,11 +246,17 @@ export default function Level1() {
     });
 
     return () => {
+      unsubStateRequest();
+      unsubStateSync();
+      unsubSudokuMove();
+      unsubSudokuMistake();
+      unsubSudokuSolved();
+      unsubSudokuReset();
       unsubClean();
       unsubUnjam();
       unsubUnlock();
     };
-  }, [onRoomEvent]);
+  }, [onRoomEvent, broadcastRoomEvent]);
 
   // Custom Mouse Cursor when Item Equipped!
   useEffect(() => {
@@ -93,6 +273,10 @@ export default function Level1() {
 
   const handleBlackboardClick = () => {
     if (isBlackboardCleaned) return;
+    if (!isArtisan) {
+      showNotification("Only the Artisan can operate objects in the room. Ask them to use the eraser.");
+      return;
+    }
     if (equippedItem === "chalk_eraser_lvl1") {
       setIsBlackboardCleaned(true);
       showNotification("You wiped the blackboard clean.");
@@ -106,6 +290,10 @@ export default function Level1() {
 
   const handleLockClick = () => {
     if (isLockUnjammed) return;
+    if (!isArtisan) {
+      showNotification("Only the Artisan can force the rusted mechanism.");
+      return;
+    }
     if (equippedItem === "brass_compass_lvl1") {
       setIsLockUnjammed(true);
       showNotification("You used the sturdy brass compass to force the rusted gears open!");
@@ -117,12 +305,62 @@ export default function Level1() {
     }
   };
 
-  const handleSudokuSolved = (code: string) => {
+  const handleSudokuReady = (code: string) => {
     // Păstrăm numerele din colțurile pătratului central (ex: 9 elemente -> index 0, 2, 6, 8)
     if (code.length === 9) {
        setExtractedCode(code[0] + code[2] + code[6] + code[8]);
     } else {
        setExtractedCode(code);
+    }
+  };
+
+  const handleSudokuMove = ({ grid }: { row: number; col: number; value: number; grid: SudokuGridState }) => {
+    if (roomCode && activeTurnClientId !== clientId) {
+      showNotification(`It is not your turn! Wait for ${activeTurnPlayer?.username || "another player"}.`);
+      return;
+    }
+
+    let nextClientId = clientId;
+    if (roomPlayers.length > 1) {
+       const currentIndex = roomPlayers.findIndex(p => p.id === clientId);
+       const nextIndex = (currentIndex + 1) % roomPlayers.length;
+       nextClientId = roomPlayers[nextIndex].id;
+    }
+
+    latestSudokuGridRef.current = grid;
+    setSudokuUserGrid(grid);
+    setLastSudokuClientId(clientId);
+    setCurrentTurnClientId(nextClientId);
+    broadcastRoomEvent("SUDOKU_MOVE_LVL1", { grid, clientId, nextClientId });
+  };
+
+  const handleSudokuMistake = ({ mistakes }: { row: number; col: number; value: number; mistakes: number }) => {
+    if (roomCode && activeTurnClientId !== clientId) {
+      showNotification(`It is not your turn! Wait for ${activeTurnPlayer?.username || "another player"}.`);
+      return;
+    }
+    
+    let nextClientId = clientId;
+    if (roomPlayers.length > 1) {
+       const currentIndex = roomPlayers.findIndex(p => p.id === clientId);
+       const nextIndex = (currentIndex + 1) % roomPlayers.length;
+       nextClientId = roomPlayers[nextIndex].id;
+    }
+
+    setSudokuMistakes(mistakes);
+    setLastSudokuClientId(clientId);
+    setCurrentTurnClientId(nextClientId);
+    broadcastRoomEvent("SUDOKU_MISTAKE_LVL1", { mistakes, clientId, nextClientId });
+  };
+
+  const handleSudokuSolved = (code: string, shouldBroadcast = true) => {
+    handleSudokuReady(code);
+    setIsSudokuCompleted(true);
+    if (shouldBroadcast) {
+      broadcastRoomEvent("SUDOKU_SOLVED_LVL1", {
+        code,
+        grid: latestSudokuGridRef.current,
+      });
     }
   };
 
@@ -135,6 +373,9 @@ export default function Level1() {
       localStorage.setItem("escapeRoomCompletedLevel", "1");
     }
     await saveAccountProgress(2);
+
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    localStorage.removeItem(key);
 
     broadcastRoomEvent("DOOR_UNLOCKED", { code: extractedCode || "7391" });
 
@@ -151,17 +392,27 @@ export default function Level1() {
     }, 3000);
   };
 
-  const handleMistakesGameOver = () => {
+  const handleMistakesGameOver = (shouldBroadcast = true) => {
     setIsGameOver(true);
-    setTimeout(() => restartGame(), 4000);
+    if (shouldBroadcast) {
+      broadcastRoomEvent("SUDOKU_RESET_LVL1", {});
+    }
+    setTimeout(() => restartGame(false), 4000);
   };
 
-  const restartGame = () => {
+  const restartGame = (shouldBroadcast = true) => {
     setIsGameOver(false);
     setExtractedCode(null);
     setIsUnlocked(false);
     setShowLevelComplete(false);
+    setSudokuMistakes(0);
+    setIsSudokuCompleted(false);
+    if (shouldBroadcast) {
+      broadcastRoomEvent("SUDOKU_RESET_LVL1", {});
+    }
     setGameId((prev) => prev + 1);
+    const key = roomCode ? `escapeRoomState_lvl1_${roomCode}` : `escapeRoomState_lvl1_single`;
+    localStorage.removeItem(key);
   };
 
   const formatElapsed = (seconds: number) => {
@@ -174,6 +425,8 @@ export default function Level1() {
     router.push("/lobby");
   };
 
+  if (!mounted) return null;
+
   return (
     <main className="min-h-screen relative overflow-hidden bg-[#0a0705] font-cormorant flex flex-col items-center select-none">
 
@@ -183,15 +436,9 @@ export default function Level1() {
         style={{ backgroundImage: 'url(/images/library.png)' }}
       />
 
-      {/* Top Header with Save & Exit */}
-      <div className="absolute top-4 left-4 z-50">
-        <button 
-          onClick={handleSaveAndExit}
-          className="flex items-center gap-2 group text-[#c7baaa] hover:text-[#d4af37] transition-all bg-black/70 px-4 py-2 uppercase tracking-widest text-xs font-cinzel border border-[#5c4026]/60 rounded-lg hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] backdrop-blur-xl"
-        >
-          Save & Exit
-        </button>
-      </div>
+
+
+
 
       {/* Title */}
       <div className="relative z-20 mt-5 mb-2 flex flex-col items-center w-full">
@@ -207,7 +454,7 @@ export default function Level1() {
 
       {/* Timer is now rendered in layout.tsx globally */}
 
-      <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-12 md:gap-24 overflow-hidden mt-6">
+      <div className="relative z-10 flex flex-col md:flex-row w-full h-full max-h-[calc(100vh-100px)] px-4 md:px-12 items-center justify-center gap-6 md:gap-12 overflow-hidden mt-6">
         <InspectionNarrator
           objects={[
             { id: "library", label: "Library Shelves", level: 1 },
@@ -217,7 +464,7 @@ export default function Level1() {
         />
 
         {/* Central Desk Area - Sudoku */}
-        <div className="flex flex-col items-center justify-center w-full max-w-xl xl:max-w-2xl relative shrink-0 translate-x-6 md:translate-x-12 xl:translate-x-20 z-20">
+        <div className="flex flex-col items-center justify-center w-full max-w-lg xl:max-w-xl relative shrink-0 z-20">
           <div className="relative p-6 md:p-10 w-full flex flex-col items-center justify-center rounded-2xl shadow-2xl"
             style={{
               backgroundImage: 'url(/images/desk.png)',
@@ -231,7 +478,41 @@ export default function Level1() {
             <div className="absolute inset-0 bg-black/50 pointer-events-none rounded-2xl"></div>
 
             <div className="relative z-10 w-full flex flex-col items-center">
-              <SudokuGrid key={`sudoku-${gameId}`} onReady={(code) => { if (code.length === 9) setExtractedCode(code[0] + code[2] + code[6] + code[8]); }} onSolved={handleSudokuSolved} onGameOver={handleMistakesGameOver} />
+              {roomCode && !isSudokuCompleted && (
+                 <div className="mb-4 bg-black/80 border border-[#d4af37] px-6 py-2 rounded shadow-[0_0_15px_rgba(212,175,55,0.4)]">
+                    <p className="font-cinzel text-[#e5d8b3] text-sm tracking-widest uppercase">
+                       Turn: <span className={activeTurnClientId === clientId ? "text-green-400 font-bold" : "text-[#d4af37]"}>
+                          {activeTurnClientId === clientId ? "Your Turn" : `${activeTurnPlayer?.username || 'Teammate'}`}
+                       </span>
+                    </p>
+                 </div>
+              )}
+              <SudokuGrid
+                key={`sudoku-${gameId}`}
+                puzzle={sharedSudoku.puzzle}
+                solution={sharedSudoku.solution}
+                userGrid={sudokuUserGrid || sharedSudoku.puzzle}
+                mistakes={sudokuMistakes}
+                isCompleted={isSudokuCompleted}
+                disabled={roomCode ? activeTurnClientId !== clientId : !isArtisan}
+                disabledMessage={roomCode ? "Wait for your turn to write." : "Only the Artisan can write in the cipher grid."}
+                onReady={handleSudokuReady}
+                onCorrectMove={handleSudokuMove}
+                onMistake={(move) => {
+                  if (roomCode && activeTurnClientId !== clientId) return; // Prevent mistake callback if blocked
+                  handleSudokuMistake(move);
+                }}
+                onSolved={handleSudokuSolved}
+                onGameOver={handleMistakesGameOver}
+                onCellUpdate={(row, col, value) => {
+                  if (roomCode && activeTurnClientId !== clientId) return;
+                  // Broadcast sudoku update to other players in room
+                  if (roomCode) {
+                    broadcastSudokuUpdate(row, col, value);
+                  }
+                }}
+                remoteUpdates={remoteUpdates}
+              />
             </div>
           </div>
         </div>

@@ -25,7 +25,8 @@ export default function RouteGuard() {
     const completedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
 
     if (targetLevel > 1 && completedLevel < targetLevel - 1) {
-      router.replace("/lobby");
+      // Temporarily disabled for testing
+      // router.replace("/lobby");
     }
   }, [pathname, router]);
 

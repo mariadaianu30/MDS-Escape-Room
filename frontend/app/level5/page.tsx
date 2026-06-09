@@ -166,7 +166,9 @@ type LocalLeaderboardEntry = {
 
 export default function Level5Page() {
   const router = useRouter();
-  const { items, isLoaded: isInventoryLoaded, addItem, removeItem, equippedItem, setEquippedItem } = useInventory();
+  const { items, isLoaded: isInventoryLoaded, addItem, removeItem, equippedItem, setEquippedItem, roomCode, roomPlayers, clientId, onRoomEvent, broadcastRoomEvent } = useInventory();
+  const isPlayer1 = !roomCode || (roomPlayers.length > 0 && roomPlayers[0].id === clientId);
+  const isPlayer2 = !roomCode || (roomPlayers.length > 0 && roomPlayers[0].id !== clientId);
   const { isArtisan, isScribe } = useRoleAccess();
   const initialRingRotations = useRef(getRandomRingRotations());
 
@@ -187,26 +189,67 @@ export default function Level5Page() {
 
   const dialRef = useRef<HTMLDivElement>(null);
   const hasClearedStaleLevel5State = useRef(false);
+  const [isRestartingRun, setIsRestartingRun] = useState(false);
+
+  // Load state from localStorage on mount/roomCode change
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl5_${roomCode}` : `escapeRoomState_lvl5_single`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.view) setView(parsed.view);
+        if (Array.isArray(parsed.leverPositions)) setLeverPositions(parsed.leverPositions);
+        if (typeof parsed.leversSolved === "boolean") setLeversSolved(parsed.leversSolved);
+        if (typeof parsed.showNote === "boolean") setShowNote(parsed.showNote);
+        if (Array.isArray(parsed.ringRotations)) setRingRotations(parsed.ringRotations);
+        if (typeof parsed.chestOpen === "boolean") setChestOpen(parsed.chestOpen);
+        if (Array.isArray(parsed.altarSlots)) setAltarSlots(parsed.altarSlots);
+        if (typeof parsed.doorOpen === "boolean") setDoorOpen(parsed.doorOpen);
+        if (parsed.victoryStats) setVictoryStats(parsed.victoryStats);
+      } catch (e) {
+        console.error("Failed to load saved level5 state", e);
+      }
+    }
+  }, [roomCode]);
+
+  // Save Level 5 state to localStorage when any state changes
+  useEffect(() => {
+    const key = roomCode ? `escapeRoomState_lvl5_${roomCode}` : `escapeRoomState_lvl5_single`;
+    const stateToSave = {
+      view, leverPositions, leversSolved, showNote, ringRotations, chestOpen, altarSlots, doorOpen, victoryStats
+    };
+    localStorage.setItem(key, JSON.stringify(stateToSave));
+  }, [view, leverPositions, leversSolved, showNote, ringRotations, chestOpen, altarSlots, doorOpen, victoryStats, roomCode]);
+
+  useEffect(() => {
+    if (!roomCode) return;
+    const unsub = onRoomEvent("LVL5_STATE_SYNC", (payload: any) => {
+      if (payload.leverPositions) setLeverPositions(payload.leverPositions);
+      if (payload.leversSolved !== undefined) setLeversSolved(payload.leversSolved);
+      if (payload.ringRotations) setRingRotations(payload.ringRotations);
+      if (payload.chestOpen !== undefined) setChestOpen(payload.chestOpen);
+      if (payload.altarSlots) setAltarSlots(payload.altarSlots);
+      if (payload.doorOpen !== undefined) setDoorOpen(payload.doorOpen);
+      if (payload.victoryStats) setVictoryStats(payload.victoryStats);
+      if (payload.view) setView(payload.view);
+    });
+    return () => unsub();
+  }, [roomCode, onRoomEvent]);
 
   useEffect(() => {
     if (!isInventoryLoaded) return;
     if (hasClearedStaleLevel5State.current) return;
     hasClearedStaleLevel5State.current = true;
 
-    [
-      "escapeRoomLevel5LeverPositions",
-      "escapeRoomLevel5LeversSolved",
-      "escapeRoomLevel5RingRotations",
-      "escapeRoomLevel5ChestOpen",
-      "escapeRoomLevel5AltarSlots",
-      "escapeRoomLevel5DoorOpen",
-    ].forEach(key => localStorage.removeItem(key));
-
+    // Remove items from previous levels that are not Level 5 items
     items.forEach(item => {
-      removeItem(item.id);
+      if (!LEVEL5_ITEM_IDS.includes(item.id)) {
+        removeItem(item.id);
+      }
     });
 
-    if (equippedItem) {
+    if (equippedItem && !LEVEL5_ITEM_IDS.includes(equippedItem)) {
       setEquippedItem(null);
     }
   }, [equippedItem, isInventoryLoaded, items, removeItem, setEquippedItem]);
@@ -247,6 +290,7 @@ export default function Level5Page() {
     setLeverPositions(prev => {
       const next = [...prev];
       next[index] = next[index] === "u" ? "d" : "u";
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { leverPositions: next });
       return next;
     });
   };
@@ -255,14 +299,15 @@ export default function Level5Page() {
     if (leversSolved) return;
     if (leverPositions[0] === "d" && leverPositions[1] === "u" && leverPositions[2] === "d") {
       setLeversSolved(true);
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { leversSolved: true });
       showNotification("The stone mechanism unlocks.");
     }
   }, [leverPositions, leversSolved]);
 
   const handleDialClick = (e: React.MouseEvent) => {
     if (chestOpen || !dialRef.current) return;
-    if (!isArtisan) {
-      showNotification("Only the Artisan can rotate the rings.");
+    if (!isPlayer1) {
+      showNotification("Only the first player (Lever Master) can rotate the rings.");
       return;
     }
     const rect = dialRef.current.getBoundingClientRect();
@@ -287,6 +332,7 @@ export default function Level5Page() {
     setRingRotations(prev => {
       const next = [...prev];
       next[ringIdx] = next[ringIdx] + RING_STEP;
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { ringRotations: next });
       return next;
     });
   };
@@ -297,6 +343,7 @@ export default function Level5Page() {
     if (solved) {
       setChestOpen(true);
       setView("chest_full");
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { chestOpen: true, view: "chest_full" });
       showNotification("The alignment is complete. The chest unseals.");
     }
   }, [ringRotations]);
@@ -308,6 +355,10 @@ export default function Level5Page() {
 
   const handleAltarClick = (index: number) => {
     if (doorOpen) return;
+    if (!isPlayer2) {
+      showNotification("Only the second player (Altar Keeper) can place relics.");
+      return;
+    }
     if (altarSlots[index]) {
       const itemId = altarSlots[index]!;
       const item = RELICS.find(i => i.id === itemId);
@@ -315,6 +366,7 @@ export default function Level5Page() {
       setAltarSlots(prev => {
         const next = [...prev];
         next[index] = null;
+        if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { altarSlots: next });
         return next;
       });
     } else if (equippedItem) {
@@ -323,6 +375,7 @@ export default function Level5Page() {
         setAltarSlots(prev => {
           const next = [...prev];
           next[index] = equippedItem;
+          if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { altarSlots: next });
           return next;
         });
         removeItem(equippedItem);
@@ -335,6 +388,7 @@ export default function Level5Page() {
     if (altarSlots[0] === RELIC_LION.id && altarSlots[1] === RELIC_CROSS.id &&
       altarSlots[2] === RELIC_EAGLE.id && altarSlots[3] === RELIC_CROWN.id) {
       setDoorOpen(true);
+      if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { doorOpen: true });
       showNotification("The heavy doors grind open.");
     }
   }, [altarSlots]);
@@ -352,7 +406,7 @@ export default function Level5Page() {
     const completedAt = new Date().toISOString();
     const localEntry: LocalLeaderboardEntry = {
       username: localStorage.getItem("escapeRoomUsername") || "Guest Explorer",
-      current_level: 5,
+      current_level: 6,
       remaining_time: stats.remainingSeconds,
       best_score: stats.score,
       completed_at: completedAt,
@@ -370,16 +424,19 @@ export default function Level5Page() {
 
       const { data: player } = await supabase
         .from("player")
-        .select("best_score, username")
+        .select("best_score, remaining_time, username")
         .eq("id", authData.user.id)
         .single();
 
-      const bestScore = Math.max(player?.best_score || 0, stats.score);
+      const isNewBest = stats.score > (player?.best_score || 0);
+      const bestScore = isNewBest ? stats.score : (player?.best_score || 0);
+      const bestRemainingTime = isNewBest ? stats.remainingSeconds : Math.max(player?.remaining_time || 0, stats.remainingSeconds);
+      
       const { error } = await supabase
         .from("player")
         .update({
-          current_level: 5,
-          remaining_time: stats.remainingSeconds,
+          current_level: 6,
+          remaining_time: bestRemainingTime,
           best_score: bestScore,
         })
         .eq("id", authData.user.id);
@@ -395,14 +452,19 @@ export default function Level5Page() {
   const completeEscapeRoom = () => {
     const remainingSeconds = Math.max(0, timeLeft);
     const elapsedSeconds = GAME_DURATION - remainingSeconds;
-    const score = Math.max(100, 1000 + remainingSeconds * 2);
+    const score = 5 * 1000 + remainingSeconds * 2;
     const stats = { elapsedSeconds, remainingSeconds, score };
 
     localStorage.setItem("escapeRoomCompletedLevel", "5");
     localStorage.setItem("escapeRoomVictoryStats", JSON.stringify(stats));
     localStorage.removeItem("escapeRoomEndTime");
+    
+    const key = roomCode ? `escapeRoomState_lvl5_${roomCode}` : `escapeRoomState_lvl5_single`;
+    localStorage.removeItem(key);
+    
     setVictoryStats(stats);
     void saveLeaderboardScore(stats);
+    if (roomCode) broadcastRoomEvent("LVL5_STATE_SYNC", { victoryStats: stats });
 
     confetti({
       particleCount: 220,
@@ -440,6 +502,12 @@ export default function Level5Page() {
   if (victoryStats) {
     return (
       <main className="relative min-h-screen overflow-hidden bg-black font-cinzel text-[#e5d8b3] flex items-center justify-center px-6">
+        {isRestartingRun && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#d4af37] border-t-transparent mb-4" />
+            <p className="text-[#d4af37] tracking-[0.2em] animate-pulse">Restarting Run...</p>
+          </div>
+        )}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-50"
           style={{ backgroundImage: "url('/images/level5_main_bg.jpg')" }}
@@ -472,12 +540,58 @@ export default function Level5Page() {
             </div>
           </div>
 
-          <button
-            onClick={() => router.push("/lobby")}
-            className="mt-10 px-8 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition-colors uppercase tracking-[0.3em] text-xs"
-          >
-            Return to Lobby
-          </button>
+          <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4">
+            <button
+              onClick={resetLevel5ForTesting}
+              className="px-8 py-3 border border-green-700/60 text-green-500/80 hover:bg-green-900/40 transition-colors uppercase tracking-[0.3em] text-[10px]"
+            >
+              Reset Lvl 5 (Debug)
+            </button>
+            <button
+              onClick={() => router.push("/lobby")}
+              className="px-8 py-3 border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition-colors uppercase tracking-[0.3em] text-xs"
+            >
+              Return to Lobby
+            </button>
+            <button
+              onClick={async () => {
+                setIsRestartingRun(true);
+                try {
+                  // Clear local storage runs
+                  Object.keys(localStorage)
+                    .filter((key) => key.startsWith("escapeRoomLevel") || key.startsWith("escapeRoomState"))
+                    .forEach((key) => localStorage.removeItem(key));
+
+                  localStorage.setItem("escapeRoomCompletedLevel", "0");
+                  localStorage.setItem("escapeRoomTimeLeft", String(GAME_DURATION));
+                  localStorage.setItem("escapeRoomEndTime", String(Date.now() + GAME_DURATION * 1000));
+                  localStorage.removeItem("escapeRoomTimeExpired");
+                  localStorage.removeItem("escapeRoomVictoryStats");
+
+                  const isGuestMode = localStorage.getItem("escapeRoomGuestMode") === "1";
+                  const { data: { session } } = await supabase.auth.getSession();
+                  
+                  if (session?.user && !isGuestMode) {
+                    // Update current_level back to 1 but keep best_score and best remaining_time!
+                    // Note: This effectively starts a new run while keeping leaderboard stats intact.
+                    const { error } = await supabase
+                      .from("player")
+                      .update({ current_level: 1, remaining_time: GAME_DURATION })
+                      .eq("id", session.user.id);
+                    if (error) console.error("Replay reset DB error:", error);
+                  }
+                  
+                  router.push("/level1");
+                } catch (e) {
+                  console.error(e);
+                  setIsRestartingRun(false);
+                }
+              }}
+              className="px-8 py-3 border border-[#d4af37] bg-[#d4af37]/10 text-[#f5e8d0] hover:bg-[#d4af37] hover:text-black hover:shadow-[0_0_20px_rgba(212,175,55,0.6)] transition-all uppercase tracking-[0.3em] text-xs font-bold"
+            >
+              Replay Game
+            </button>
+          </div>
         </section>
       </main>
     );
@@ -604,13 +718,13 @@ export default function Level5Page() {
                   key={i}
                   index={i}
                   state={position}
-                  onToggle={() => isArtisan ? toggleLever(i) : showNotification("Only the Artisan can move the levers.")}
+                  onToggle={() => isPlayer1 ? toggleLever(i) : showNotification("Only the first player (Lever Master) can move the levers.")}
                 />
               ))}
             </div>
-            {!isArtisan && (
+            {!isPlayer1 && (
               <div className="absolute bottom-24 left-1/2 z-[90] w-[min(420px,80vw)] -translate-x-1/2">
-                <RoleBlockedNotice role="artisan" label="Only the Artisan can move the levers." />
+                <RoleBlockedNotice role="artisan" label="Only the first player (Lever Master) can move the levers." />
               </div>
             )}
           </section>

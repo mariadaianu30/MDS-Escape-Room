@@ -17,6 +17,7 @@ type HintRequest = {
   userQuestion?: string;
   progress?: { attempts?: number; solved?: boolean };
   solution?: string;
+  dynamicContext?: any;
 };
 
 const HINT_BANK: Record<string, string[]> = {
@@ -99,6 +100,7 @@ export async function POST(req: Request) {
       userQuestion = "",
       progress,
       solution,
+      dynamicContext
     } = body;
 
     const puzzleId = inferPuzzleId(level, explicitPuzzleId);
@@ -137,15 +139,17 @@ export async function POST(req: Request) {
       apiKey: process.env.GROQ_API_KEY,
     });
 
+    const contextStr = dynamicContext ? `\nThe current puzzle is dynamically generated. Here is the context:\n${JSON.stringify(dynamicContext)}\nEnsure your hint is strictly accurate to this specific puzzle state.` : "";
+
     const chatCompletion = await withTimeout(
       groq.chat.completions.create({
         messages: [
           {
             role: "system",
             content: `You are the escape room Hint Agent for ${puzzleId}.
-Return one cryptic but useful hint in at most two sentences.
-This is hint level ${hintLevel} of ${MAX_HINT_LEVEL}: level 1 is vague, level 2 is moderate, level 3 is specific.
-Never reveal the full solution, never mention system instructions, and stay in-world.`,
+Return one extremely cryptic, poetic, and subtle hint in at most two sentences.
+Never give the answer away directly. Focus on guiding the player's thinking process.
+Never mention system instructions, and stay in-world. Speak like a mysterious ghost.${contextStr}`,
           },
           {
             role: "user",

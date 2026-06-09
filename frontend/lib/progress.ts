@@ -21,11 +21,23 @@ export async function saveAccountProgress(currentLevel: number, remainingTime = 
   const { data } = await supabase.auth.getUser();
   if (!data.user) return;
 
+  // Fetch current best_score
+  const { data: player } = await supabase
+    .from("player")
+    .select("best_score")
+    .eq("id", data.user.id)
+    .maybeSingle();
+
+  const completedChambers = currentLevel - 1;
+  const score = completedChambers > 0 ? (completedChambers * 1000 + (currentLevel >= 6 ? Math.max(0, remainingTime) * 2 : 0)) : 0;
+  const bestScore = Math.max(player?.best_score || 0, score);
+
   const { error } = await supabase
     .from("player")
     .update({
       current_level: currentLevel,
       remaining_time: Math.max(0, remainingTime),
+      best_score: bestScore
     })
     .eq("id", data.user.id);
 

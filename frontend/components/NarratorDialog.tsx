@@ -59,7 +59,7 @@ export default function NarratorDialog() {
     <>
       <button
         onClick={askNarrator}
-        className="fixed bottom-24 right-4 lg:bottom-8 lg:right-6 z-[60] flex items-center justify-center rounded-full border-2 border-[#5c4026] bg-black/80 p-3 text-[#c7baaa] shadow-[0_0_15px_black] transition-all hover:border-[#d4af37] hover:text-[#d4af37]"
+        className="fixed bottom-6 right-6 z-40 w-14 h-14 flex items-center justify-center rounded-full border-2 border-[#5c4026] bg-black/80 text-[#c7baaa] shadow-[0_0_15px_black] transition-all hover:border-[#d4af37] hover:text-[#d4af37]"
         title="Ask the Narrator"
       >
         <BookOpen size={24} />

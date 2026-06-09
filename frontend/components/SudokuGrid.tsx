@@ -3,34 +3,103 @@
 import { useState, useEffect, useMemo } from "react";
 import { generateSudoku } from "@/lib/sudoku";
 
+type Grid = number[][];
+
 interface SudokuGridProps {
   onReady: (code: string) => void;
   onSolved: (code: string) => void;
   onGameOver: () => void;
+  puzzle?: Grid | null;
+  solution?: Grid | null;
+  userGrid?: Grid | null;
+  mistakes?: number;
+  isCompleted?: boolean;
+  disabled?: boolean;
+  disabledMessage?: string;
+  onCorrectMove?: (move: { row: number; col: number; value: number; grid: Grid }) => void;
+  onMistake?: (move: { row: number; col: number; value: number; mistakes: number }) => void;
+  onCellUpdate?: (row: number, col: number, value: number) => void;
+  remoteUpdates?: Array<{ row: number; col: number; value: number; username: string }>;
 }
 
-export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGridProps) {
-  const [initialGrid, setInitialGrid] = useState<number[][] | null>(null);
-  const [userGrid, setUserGrid] = useState<number[][] | null>(null);
-  const [solutionGrid, setSolutionGrid] = useState<number[][] | null>(null);
+const cloneGrid = (grid: Grid) => grid.map((row) => [...row]);
+
+const extractCenterCode = (grid: Grid) => {
+  let code = "";
+  for (let ir = 3; ir <= 5; ir++) {
+    for (let ic = 3; ic <= 5; ic++) {
+      code += grid[ir][ic];
+    }
+  }
+  return code;
+};
+
+export default function SudokuGrid({
+  onReady,
+  onSolved,
+  onGameOver,
+  puzzle,
+  solution,
+  userGrid: controlledUserGrid,
+  mistakes: controlledMistakes,
+  isCompleted: controlledIsCompleted,
+  disabled = false,
+  disabledMessage = "Only the Artisan can write in the cipher grid.",
+  onCorrectMove,
+  onMistake,
+  onCellUpdate,
+  remoteUpdates = [],
+}: SudokuGridProps) {
+  const [initialGrid, setInitialGrid] = useState<Grid | null>(null);
+  const [internalUserGrid, setInternalUserGrid] = useState<Grid | null>(null);
+  const [solutionGrid, setSolutionGrid] = useState<Grid | null>(null);
   
-  const [mistakes, setMistakes] = useState(0);
+  const [internalMistakes, setInternalMistakes] = useState(0);
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null);
   const [hoveredNum, setHoveredNum] = useState<number | null>(null);
   
   const [flashCell, setFlashCell] = useState<{r: number, c: number, type: 'red' | 'green'} | null>(null);
-  const [isCompleted, setIsCompleted] = useState(false);
+  const [internalIsCompleted, setInternalIsCompleted] = useState(false);
+  const [remoteFlash, setRemoteFlash] = useState<{r: number, c: number, username: string} | null>(null);
+
+  const userGrid = controlledUserGrid ?? internalUserGrid;
+  const mistakes = controlledMistakes ?? internalMistakes;
+  const isCompleted = controlledIsCompleted ?? internalIsCompleted;
 
   useEffect(() => {
-    const { puzzle, solution } = generateSudoku();
-    setSolutionGrid(solution);
-    setInitialGrid(puzzle);
-    setUserGrid(puzzle.map(row => [...row]));
+    if (puzzle && solution) {
+      setSolutionGrid(solution);
+      setInitialGrid(puzzle);
+      if (!controlledUserGrid) {
+        setInternalUserGrid(cloneGrid(puzzle));
+      }
+      setInternalMistakes(0);
+      setInternalIsCompleted(false);
+      onReady(extractCenterCode(solution));
+      return;
+    }
+
+    const generated = generateSudoku();
+    setSolutionGrid(generated.solution);
+    setInitialGrid(generated.puzzle);
+    setInternalUserGrid(cloneGrid(generated.puzzle));
+    setInternalMistakes(0);
+    setInternalIsCompleted(false);
+    onReady(extractCenterCode(generated.solution));
+  // Initialize only when the source puzzle changes. Parent callbacks can be inline.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [puzzle, solution]);
+
+  // Handle remote updates from other players
+  useEffect(() => {
+    if (remoteUpdates.length === 0) return;
+    const lastUpdate = remoteUpdates[remoteUpdates.length - 1];
+    setRemoteFlash({ r: lastUpdate.row, c: lastUpdate.col, username: lastUpdate.username });
+    setTimeout(() => setRemoteFlash(null), 1000);
+  }, [remoteUpdates]);
 
   const handleNumberClick = (num: number) => {
-    if (!selectedCell || !userGrid || !solutionGrid || isCompleted) return;
+    if (disabled || !selectedCell || !userGrid || !solutionGrid || isCompleted) return;
     const [r, c] = selectedCell;
 
     // Check if cell is pre-filled or already correct
@@ -40,10 +109,17 @@ export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGrid
     const isCorrect = solutionGrid[r][c] === num;
 
     if (isCorrect) {
-      const newGrid = [...userGrid];
-      newGrid[r] = [...newGrid[r]];
+      const newGrid = cloneGrid(userGrid);
       newGrid[r][c] = num;
-      setUserGrid(newGrid);
+      if (controlledUserGrid) {
+        onCorrectMove?.({ row: r, col: c, value: num, grid: newGrid });
+      } else {
+        setInternalUserGrid(newGrid);
+        onCorrectMove?.({ row: r, col: c, value: num, grid: newGrid });
+      }
+      
+      // Broadcast to other players
+      onCellUpdate?.(r, c, num);
       
       setFlashCell({ r, c, type: 'green' });
       setTimeout(() => setFlashCell(null), 500);
@@ -60,24 +136,20 @@ export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGrid
       }
       
       if (complete) {
-        setIsCompleted(true);
-        // Extract center block
-        let code = "";
-        for (let ir = 3; ir <= 5; ir++) {
-          for (let ic = 3; ic <= 5; ic++) {
-             code += solutionGrid[ir][ic];
-          }
+        if (controlledIsCompleted === undefined) {
+          setInternalIsCompleted(true);
         }
-        onSolved(code);
+        onSolved(extractCenterCode(solutionGrid));
       }
     } else {
-      setMistakes(m => {
-        const newMistakes = m + 1;
-        if (newMistakes >= 3) {
-           setTimeout(onGameOver, 500);
-        }
-        return newMistakes;
-      });
+      const newMistakes = mistakes + 1;
+      if (controlledMistakes === undefined) {
+        setInternalMistakes(newMistakes);
+      }
+      onMistake?.({ row: r, col: c, value: num, mistakes: newMistakes });
+      if (newMistakes >= 3) {
+         setTimeout(onGameOver, 500);
+      }
       
       setFlashCell({ r, c, type: 'red' });
       setTimeout(() => setFlashCell(null), 800);
@@ -99,7 +171,12 @@ export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGrid
   if (!userGrid) return <div className="text-[#a89f91] animate-pulse">Summoning Ancient Grid...</div>;
 
   return (
-    <div className="bg-[#1f150b] p-4 md:p-6 rounded-lg shadow-2xl border-4 border-[#3c2a1a] flex flex-col items-center w-full max-w-[450px]">
+    <div className="p-4 md:p-6 rounded-lg flex flex-col items-center w-full max-w-[380px] relative">
+      {disabled && (
+        <div className="mb-4 w-full rounded border border-[#5c4026]/70 bg-black/45 px-4 py-2 text-center font-cinzel text-[10px] uppercase tracking-[0.18em] text-[#8c7a6b]">
+          {disabledMessage}
+        </div>
+      )}
       
       <div className="w-full flex justify-between items-center mb-4">
          <h2 className="font-cinzel text-xl font-bold text-[#e5d8b3] tracking-widest uppercase">The Cipher Grid</h2>
@@ -118,6 +195,7 @@ export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGrid
             const isCenterBox = r >= 3 && r <= 5 && c >= 3 && c <= 5;
             const isFlashRed = flashCell?.r === r && flashCell?.c === c && flashCell?.type === 'red';
             const isFlashGreen = flashCell?.r === r && flashCell?.c === c && flashCell?.type === 'green';
+            const isRemoteFlash = remoteFlash?.r === r && remoteFlash?.c === c;
             const isHoverMatch = hoveredNum !== null && val === hoveredNum;
             
             // Highlight the exact cell correctly based on logic
@@ -132,6 +210,7 @@ export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGrid
 
             if (isFlashRed) bgClass = "bg-red-800 transition-colors duration-150";
             if (isFlashGreen) bgClass = "bg-green-800 transition-colors duration-150";
+            if (isRemoteFlash) bgClass = "bg-blue-900 animate-pulse transition-colors duration-300";
 
             let textClass = isInitial ? "text-[#8c7a6b]" : "text-[#d4af37]";
 
@@ -150,7 +229,7 @@ export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGrid
             return (
               <div
                 key={`${r}-${c}`}
-                onClick={() => (!isInitial && val === 0) && setSelectedCell([r, c])}
+                onClick={() => (!disabled && !isInitial && val === 0) && setSelectedCell([r, c])}
                 onMouseEnter={() => { if (val !== 0) setHoveredNum(val); }}
                 onMouseLeave={() => setHoveredNum(null)}
                 className={`flex items-center justify-center font-cormorant font-bold text-xl md:text-2xl 
@@ -177,7 +256,7 @@ export default function SudokuGrid({ onReady, onSolved, onGameOver }: SudokuGrid
             return (
               <button
                  key={num}
-                 disabled={isUsedUp || isCompleted || !selectedCell}
+                 disabled={disabled || isUsedUp || isCompleted || !selectedCell}
                  onClick={() => handleNumberClick(num)}
                  className={`py-2 rounded font-cormorant font-bold text-xl transition-all
                    ${isUsedUp 
