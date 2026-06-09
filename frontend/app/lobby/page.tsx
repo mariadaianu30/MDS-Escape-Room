@@ -119,18 +119,28 @@ export default function IntroHome() {
         const { data, error } = await supabase
           .from('player')
           .select('username, current_level, remaining_time, best_score')
+          .gte('best_score', 5000)
           .order('best_score', { ascending: false })
-          .order('current_level', { ascending: false })
-          .order('remaining_time', { ascending: false })
-          .limit(10);
+          .limit(100); // Fetch more to deduplicate locally
         if (error) {
           setLeaderboardData(localScores);
           return;
         }
-        const merged = [...(data || []), ...localScores]
-          .sort((a, b) => (b.best_score || 0) - (a.best_score || 0) || (b.remaining_time || 0) - (a.remaining_time || 0))
-          .slice(0, 10);
-        setLeaderboardData(merged);
+        
+        const allScores = [...(data || []), ...localScores]
+          .sort((a, b) => (b.best_score || 0) - (a.best_score || 0) || (b.remaining_time || 0) - (a.remaining_time || 0));
+        
+        const uniquePlayers = [];
+        const seenUsernames = new Set();
+        for (const p of allScores) {
+           const uname = p.username || "Unknown";
+           if (!seenUsernames.has(uname)) {
+              seenUsernames.add(uname);
+              uniquePlayers.push(p);
+           }
+        }
+        
+        setLeaderboardData(uniquePlayers.slice(0, 10));
       } catch (err) {
         console.error("Failed to fetch leaderboard:", err);
         setLeaderboardData(JSON.parse(localStorage.getItem("escapeRoomLocalLeaderboard") || "[]"));
@@ -258,7 +268,7 @@ export default function IntroHome() {
         if (!player) {
           const { data: fetchedPlayer } = await supabase
             .from('player')
-            .select('username, current_level, remaining_time, best_score')
+            .select('*')
             .eq('id', session.user.id)
             .maybeSingle();
           player = fetchedPlayer;
@@ -279,8 +289,9 @@ export default function IntroHome() {
           username: player?.username || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Explorer',
           email: session.user.email || '',
           current_level: player?.current_level || 1,
-          remaining_time: accountRemainingTime,
-          best_score: player?.best_score || 0
+          remaining_time: player?.remaining_time ?? 1800,
+          best_score: player?.best_score || 0,
+          games_played: player?.games_played || 0
         });
       } else {
         const guestCompletedLevel = parseInt(localStorage.getItem("escapeRoomCompletedLevel") || "0", 10);
@@ -544,12 +555,18 @@ export default function IntroHome() {
     try {
       const isGuestMode = localStorage.getItem("escapeRoomGuestMode") === "1";
       const { data: { session } } = await supabase.auth.getSession();
+      
+      const prevRuns = parseInt(localStorage.getItem("escapeRoomRunsAttempted") || "0", 10);
+      localStorage.setItem("escapeRoomRunsAttempted", String(prevRuns + 1));
+
       if (session?.user && !isGuestMode) {
+        const nextGamesPlayed = (userProfile?.games_played || 0) + 1;
         const { error } = await supabase
           .from("player")
-          .update({ current_level: 1, remaining_time: GAME_DURATION })
+          .update({ current_level: 1, remaining_time: GAME_DURATION, games_played: nextGamesPlayed })
           .eq("id", session.user.id);
         if (error) throw error;
+        setUserProfile(prev => prev ? { ...prev, games_played: nextGamesPlayed } : null);
       }
 
       setCompletedLevel(0);
@@ -595,6 +612,10 @@ export default function IntroHome() {
     }
 
     if (level === 1) {
+       const prevRuns = parseInt(localStorage.getItem("escapeRoomRunsAttempted") || "0", 10);
+       if (prevRuns === 0) {
+          localStorage.setItem("escapeRoomRunsAttempted", "1");
+       }
        // Snap to top to ensure clean zoom origin!
        window.scrollTo({ top: 0, behavior: 'smooth' });
        setIsZooming(true);
@@ -909,7 +930,7 @@ export default function IntroHome() {
                )
             ) : (
                <button 
-                  onClick={() => isAccountRunExpired ? restartRun() : attemptEnterDoor(Math.min(completedLevel + 1, 5))}
+                  onClick={() => (isAccountRunExpired || completedLevel >= 5) ? restartRun() : attemptEnterDoor(Math.min(completedLevel + 1, 5))}
                   disabled={isRestartingRun}
                   className={`font-cinzel text-4xl md:text-5xl text-[#1a1107] font-bold tracking-[0.2em] px-16 py-6 rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 uppercase border-4 border-white/50 disabled:opacity-60 disabled:cursor-wait
                      ${isAccountRunExpired
@@ -917,7 +938,7 @@ export default function IntroHome() {
                        : "bg-[radial-gradient(ellipse_at_center,_#ffedb3_0%,_#d4af37_100%)] shadow-[0_0_100px_rgba(212,175,55,1)] hover:shadow-[0_0_150px_rgba(255,237,179,1)] animate-pulse"
                      }`}
                >
-                  {isRestartingRun ? "Restarting..." : isAccountRunExpired ? "Restart Run" : completedLevel > 0 ? `Resume (Ch1-${Math.min(completedLevel + 1, 5)})` : "Play"}
+                  {isRestartingRun ? "Restarting..." : isAccountRunExpired ? "Restart Run" : completedLevel >= 5 ? "Replay Game" : completedLevel > 0 ? `Continue Chamber ${Math.min(completedLevel + 1, 5)}` : "Play"}
                </button>
             )}
          </div>
@@ -955,6 +976,8 @@ export default function IntroHome() {
          </div>
       )}
 
+
+
       {/* Leaderboard Modal overlay */}
       {showLeaderboard && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 px-4">
@@ -990,7 +1013,6 @@ export default function IntroHome() {
                               <th className="py-3 px-2 text-center w-16">Rank</th>
                               <th className="py-3 px-4">Explorer</th>
                               <th className="py-3 px-4 text-center">Score</th>
-                              <th className="py-3 px-4 text-center">Highest Chamber</th>
                               <th className="py-3 px-4 text-center">Remaining Time</th>
                            </tr>
                         </thead>
@@ -1017,9 +1039,6 @@ export default function IntroHome() {
                                     </td>
                                     <td className="py-4 px-4 text-center font-cinzel text-[#d4af37]">
                                        {player.best_score || 0}
-                                    </td>
-                                    <td className="py-4 px-4 text-center">
-                                       Chamber {highestChamber}
                                     </td>
                                     <td className="py-4 px-4 text-center font-mono text-sm tracking-wider text-red-300">
                                        {formatTime(player.remaining_time)}
@@ -1250,19 +1269,30 @@ export default function IntroHome() {
                            <p className="text-3xl font-bold text-[#d4af37]">{userProfile.best_score || 0}</p>
                         </div>
                         <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
-                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Chambers Conquered</p>
-                           <p className="text-3xl font-bold">{completedLevel} / 5</p>
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Best Time</p>
+                           <p className="text-3xl font-bold text-[#e5d8b3]">
+                              {userProfile.best_score && userProfile.best_score >= 5000 
+                                 ? formatTime((userProfile.best_score - 5000) / 2) 
+                                 : "N/A"}
+                           </p>
                         </div>
-                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
-                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Singleplayer Runs</p>
-                           <p className="text-3xl font-bold">0</p>
-                        </div>
-                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center">
-                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Multiplayer Runs</p>
-                           <p className="text-3xl font-bold">0</p>
+                        <div className="p-4 bg-[#1f150e] border border-[#5c4026]/60 rounded-lg flex flex-col items-center justify-center md:col-span-2">
+                           <p className="text-[#8c7a6b] text-xs uppercase tracking-wider mb-1">Games Played</p>
+                           <p className="text-3xl font-bold text-[#e5d8b3]">{userProfile.games_played || 0}</p>
                         </div>
                      </div>
                   </div>
+                  
+                  <button 
+                     onClick={async () => {
+                        clearRunStorage();
+                        await supabase.auth.signOut();
+                        window.location.reload();
+                     }}
+                     className="mt-6 w-full py-4 bg-red-950/40 hover:bg-red-900/60 border border-red-900/50 text-red-200 transition-colors uppercase tracking-widest text-xs font-bold rounded-lg"
+                  >
+                     Sign Out
+                  </button>
                      {isAccountRunExpired && (
                         <button
                            onClick={restartRun}
